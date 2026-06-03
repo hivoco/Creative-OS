@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+uploads/
+*.sqlite3
+.DS_Store
+
+# Downloaded Noto fonts (run download_fonts.py)
+fonts/

@@ -1,0 +1,43 @@
+"""Minimal S3 uploader — used to give Segmind a public image URL and to store
+the AI-resized output. Mirrors the uploader from the previous (iifl) backend.
+"""
+
+from functools import lru_cache
+
+import boto3
+
+from app.core.config import settings
+
+
+def s3_enabled() -> bool:
+    return bool(
+        settings.aws_bucket_name
+        and settings.aws_access_key_id
+        and settings.aws_secret_access_key
+    )
+
+
+@lru_cache
+def _client():
+    return boto3.client(
+        "s3",
+        region_name=settings.aws_region,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+    )
+
+
+def upload_bytes(*, data: bytes, key: str, content_type: str) -> str:
+    """Upload bytes under the base prefix and return the public URL."""
+    if not data:
+        raise ValueError("data cannot be empty")
+    s3_key = f"{settings.s3_base_prefix}/{key}".lstrip("/")
+    _client().put_object(
+        Bucket=settings.aws_bucket_name,
+        Key=s3_key,
+        Body=data,
+        ContentType=content_type,
+    )
+    return (
+        f"https://{settings.aws_bucket_name}.s3.{settings.aws_region}.amazonaws.com/{s3_key}"
+    )
