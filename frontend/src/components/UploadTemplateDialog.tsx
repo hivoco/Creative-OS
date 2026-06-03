@@ -55,7 +55,7 @@ export function UploadTemplateDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button className="h-11">
           <Upload className="mr-1.5 h-4 w-4" />
           Upload template
         </Button>
@@ -108,7 +108,6 @@ export function UploadTemplateDialog() {
           <Button
             disabled={!name || !file || mutation.isPending}
             onClick={() => mutation.mutate()}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {mutation.isPending ? 'Uploading…' : 'Create template'}
           </Button>

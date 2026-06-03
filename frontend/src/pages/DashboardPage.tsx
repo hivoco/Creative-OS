@@ -1,11 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { FileImage, Layers, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { FileImage, Layers, Search, Trash2 } from 'lucide-react'
 
 import { AppHeader } from '@/components/AppHeader'
 import { UploadTemplateDialog } from '@/components/UploadTemplateDialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
 import { deleteTemplate, listTemplates } from '@/lib/services'
@@ -16,11 +18,16 @@ export function DashboardPage() {
   const qc = useQueryClient()
   const { user } = useAuth()
   const isEditor = user?.role === 'editor'
+  const [search, setSearch] = useState('')
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ['templates'],
     queryFn: listTemplates,
   })
+
+  const filtered = templates?.filter((t) =>
+    t.name.toLowerCase().includes(search.trim().toLowerCase()),
+  )
 
   const del = useMutation({
     mutationFn: (id: string) => deleteTemplate(id),
@@ -44,16 +51,29 @@ export function DashboardPage() {
     <div className="min-h-screen">
       <AppHeader />
       <main className="mx-auto max-w-7xl px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Templates</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-4xl font-extrabold uppercase tracking-tight sm:text-5xl">
+              Templates
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               {isEditor
                 ? 'Upload blanks, place text, translate, and export.'
                 : 'Review templates and leave feedback.'}
             </p>
           </div>
-          {isEditor && <UploadTemplateDialog />}
+          <div className="flex items-center gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search Template"
+                className="h-11 rounded-full bg-white pl-11 shadow-sm"
+              />
+            </div>
+            {isEditor && <UploadTemplateDialog />}
+          </div>
         </div>
 
         {isLoading ? (
@@ -66,9 +86,16 @@ export function DashboardPage() {
               {isEditor && <p className="text-sm">Upload your first blank template to begin.</p>}
             </CardContent>
           </Card>
+        ) : !filtered?.length ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+              <Search className="h-10 w-10 opacity-40" />
+              <p className="font-medium">No templates match “{search}”</p>
+            </CardContent>
+          </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {templates.map((t) => (
+            {filtered.map((t) => (
               <Card
                 key={t.id}
                 className="group relative overflow-hidden transition hover:shadow-lg"

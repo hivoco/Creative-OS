@@ -130,8 +130,14 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+    /* Grainy dotted texture applied app-wide: light-gray base + darker dots so
+       the white cards/panels read as raised above it. */
+    background-color: oklch(0.965 0 0);
+    background-image: radial-gradient(oklch(0.82 0 0) 1px, transparent 1.4px);
+    background-size: 22px 22px;
+    background-attachment: fixed;
   }
 }
 

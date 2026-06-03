@@ -14,7 +14,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <div className="min-h-screen bg-background text-foreground antialiased">
+        <div className="min-h-screen text-foreground antialiased">
           <App />
         </div>
       </BrowserRouter>
