@@ -20,24 +20,24 @@ import { getToken } from '@/lib/api'
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, user } = useAuth()
+  const { login, user, admin } = useAuth()
   const [email, setEmail] = useState('editor@mamaearth.com')
   const [password, setPassword] = useState('editor123')
   const [loading, setLoading] = useState(false)
 
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
-  if (user && getToken()) {
-    return <Navigate to={from} replace />
+  if (getToken() && (user || admin)) {
+    return <Navigate to={admin ? '/admin' : from} replace />
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(email, password)
+      const accountType = await login(email, password)
       toast.success('Welcome back')
-      navigate(from, { replace: true })
+      navigate(accountType === 'superadmin' ? '/admin' : from, { replace: true })
     } catch {
       toast.error('Invalid credentials')
     } finally {

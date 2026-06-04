@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 43200  # 30 days
 
+    # Super admin — the single global admin, seeded on startup if not present.
+    superadmin_email: str = ""
+    superadmin_password: str = ""
+
     @property
     def sqlalchemy_url(self) -> str:
         if self.database_url:

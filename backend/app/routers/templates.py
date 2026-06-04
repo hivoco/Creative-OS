@@ -1,17 +1,41 @@
 import json
+import os
+import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_editor
-from app.models import LayerTranslation, Template, TemplateVersion, TextLayer
+from app.core.security import new_uuid
+from app.models import Brand, LayerTranslation, Template, TemplateVersion, TextLayer
 from app.schemas.template import TemplateDetailOut, TemplateOut, TemplateVersionOut
-from app.services.storage import save_blank_image
+from app.services import s3, storage
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 
 MAX_FILE_SIZE = 32 * 1024 * 1024
+
+
+def _slugify(value: str) -> str:
+    """Lowercase, dash-separated, URL/key-safe slug."""
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    return slug or "untitled"
+
+
+def _store_blank(
+    data: bytes, *, brand_slug: str, name: str, original_name: str, content_type: str
+) -> str:
+    """Persist a blank template image (S3 when configured, else local) under a
+    brand-scoped, human-readable key and return its public URL.
+
+    e.g. templates/<brand_slug>/<name_slug>-<short_uuid>.png
+    """
+    ext = os.path.splitext(original_name)[1].lower() or ".png"
+    key = f"templates/{brand_slug}/{_slugify(name)}-{new_uuid()[:8]}{ext}"
+    if s3.s3_enabled():
+        return s3.upload_bytes(data=data, key=key, content_type=content_type or "image/png")
+    return storage.save_bytes(data=data, key=key)
 
 
 def _get_owned_template(db: Session, template_id: str, brand_id: str) -> Template:
@@ -75,7 +99,16 @@ async def create_template(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid dimensions_json")
 
-    url = save_blank_image(data=content, original_name=blank_image.filename or "blank.png")
+    brand = db.get(Brand, current.brand_id)
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    url = _store_blank(
+        content,
+        brand_slug=brand.slug,
+        name=name,
+        original_name=blank_image.filename or "blank.png",
+        content_type=blank_image.content_type or "image/png",
+    )
 
     tpl = Template(
         brand_id=current.brand_id,

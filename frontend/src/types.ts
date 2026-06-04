@@ -1,4 +1,5 @@
 export type Role = 'editor' | 'manager'
+export type AccountType = 'brand_user' | 'superadmin'
 
 export interface User {
   id: string
@@ -6,6 +7,7 @@ export interface User {
   email: string
   role: Role
   brand_id: string
+  status?: string
 }
 
 export interface Brand {
@@ -14,13 +16,40 @@ export interface Brand {
   slug: string
   logo_url: string | null
   primary_color: string
+  status?: string
+}
+
+export interface Admin {
+  id: string
+  name: string
+  email: string
 }
 
 export interface LoginResponse {
   access_token: string
   token_type: string
-  user: User
-  brand: Brand
+  account_type: AccountType
+  user: User | null
+  brand: Brand | null
+  admin: Admin | null
+}
+
+export interface BrandWithStats {
+  id: string
+  name: string
+  slug: string
+  status: string
+  primary_color: string
+  logo_url: string | null
+  timezone: string
+  created_at: string
+  template_count: number
+  video_count: number
+  user_count: number
+}
+
+export interface BrandDetail extends BrandWithStats {
+  users: User[]
 }
 
 export interface Dimensions {

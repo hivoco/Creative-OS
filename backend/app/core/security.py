@@ -21,16 +21,24 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(*, user_id: str, brand_id: str, role: str) -> str:
+def create_access_token(
+    *,
+    user_id: str,
+    role: str,
+    brand_id: str | None = None,
+    account_type: str = "brand_user",
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
     payload = {
         "sub": user_id,
-        "brand_id": brand_id,
         "role": role,
+        "typ": account_type,
         "exp": expire,
     }
+    if brand_id:
+        payload["brand_id"] = brand_id
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

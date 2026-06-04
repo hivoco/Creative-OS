@@ -1,5 +1,8 @@
 import { api } from '@/lib/api'
 import type {
+  Admin,
+  BrandDetail,
+  BrandWithStats,
   Delta,
   FeedbackComment,
   LayerTranslation,
@@ -230,4 +233,93 @@ export async function updateRatioVariant(
 
 export async function deleteRatioVariant(variantId: string): Promise<void> {
   await api.delete(`/ratio-variants/${variantId}`)
+}
+
+// ----------------------------------------------------------------- admin ----
+
+export interface BrandUserInput {
+  name: string
+  email: string
+  password: string
+  role: 'editor' | 'manager'
+}
+
+export async function getAdminMe(): Promise<Admin> {
+  const { data } = await api.get<Admin>('/admin/me')
+  return data
+}
+
+export async function updateAdminMe(body: {
+  name?: string
+  email?: string
+  password?: string
+}): Promise<Admin> {
+  const { data } = await api.patch<Admin>('/admin/me', body)
+  return data
+}
+
+export async function listBrands(): Promise<BrandWithStats[]> {
+  const { data } = await api.get<BrandWithStats[]>('/admin/brands')
+  return data
+}
+
+export async function getBrand(brandId: string): Promise<BrandDetail> {
+  const { data } = await api.get<BrandDetail>(`/admin/brands/${brandId}`)
+  return data
+}
+
+export async function createBrand(body: {
+  name: string
+  slug: string
+  primary_color?: string
+  timezone?: string
+  users?: BrandUserInput[]
+}): Promise<BrandDetail> {
+  const { data } = await api.post<BrandDetail>('/admin/brands', body)
+  return data
+}
+
+export async function updateBrand(
+  brandId: string,
+  body: {
+    name?: string
+    slug?: string
+    primary_color?: string
+    logo_url?: string
+    timezone?: string
+    status?: 'active' | 'inactive'
+  },
+): Promise<BrandDetail> {
+  const { data } = await api.patch<BrandDetail>(`/admin/brands/${brandId}`, body)
+  return data
+}
+
+export async function deleteBrand(brandId: string): Promise<void> {
+  await api.delete(`/admin/brands/${brandId}`)
+}
+
+export async function createBrandUser(
+  brandId: string,
+  body: BrandUserInput,
+): Promise<User> {
+  const { data } = await api.post<User>(`/admin/brands/${brandId}/users`, body)
+  return data
+}
+
+export async function updateBrandUser(
+  userId: string,
+  body: {
+    name?: string
+    email?: string
+    password?: string
+    role?: 'editor' | 'manager'
+    status?: 'active' | 'inactive'
+  },
+): Promise<User> {
+  const { data } = await api.patch<User>(`/admin/users/${userId}`, body)
+  return data
+}
+
+export async function deleteBrandUser(userId: string): Promise<void> {
+  await api.delete(`/admin/users/${userId}`)
 }
