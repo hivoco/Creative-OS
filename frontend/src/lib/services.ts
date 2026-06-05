@@ -223,6 +223,35 @@ export async function createRatioVariant(
   return data
 }
 
+// Fetch the blank through our API (which sends CORS headers) so the browser can
+// draw it onto a canvas without tainting it — fetching S3 directly would taint.
+export async function getBlankImageBlob(versionId: string): Promise<Blob> {
+  const { data } = await api.get<Blob>(`/versions/${versionId}/blank-image`, {
+    responseType: 'blob',
+  })
+  return data
+}
+
+// Resize from a browser-rendered composite (matches the canvas exactly) — the
+// server only extends the canvas to the new ratio, no text re-render.
+export async function createRatioVariantFromComposite(
+  versionId: string,
+  ratio: string,
+  targetDims: { w: number; h: number },
+  composite: Blob,
+): Promise<RatioVariant> {
+  const form = new FormData()
+  form.append('ratio', ratio)
+  form.append('target_w', String(targetDims.w))
+  form.append('target_h', String(targetDims.h))
+  form.append('composite', composite, `composite-${ratio.replace(':', 'x')}.png`)
+  const { data } = await api.post<RatioVariant>(
+    `/versions/${versionId}/ratio-variants/from-composite`,
+    form,
+  )
+  return data
+}
+
 export async function updateRatioVariant(
   variantId: string,
   body: { layers_json?: RatioVariant['layers_json']; status?: 'draft' | 'published' },

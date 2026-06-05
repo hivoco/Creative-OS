@@ -9,8 +9,8 @@ import { UploadTemplateDialog } from '@/components/UploadTemplateDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { ConfirmDialog } from '@/components/ui/alert-dialog'
-import { deleteTemplate, listTemplates } from '@/lib/services'
+import { ConfirmPopover } from '@/components/ui/confirm-popover'
+import { createVersion, deleteTemplate, listTemplates } from '@/lib/services'
 import { useAuth } from '@/store/auth'
 
 export function DashboardPage() {
@@ -38,13 +38,32 @@ export function DashboardPage() {
     onError: () => toast.error('Could not delete template'),
   })
 
-  function openLatest(versions?: { id: string; version_number: number }[]) {
-    if (!versions?.length) return
-    const latest = versions.reduce(
-      (a, b) => (b.version_number > a.version_number ? b : a),
-      versions[0],
-    )
-    navigate(`/editor/${latest.id}`)
+  // Deleting the last version leaves the template with none. Clicking such a
+  // template recreates a fresh version so editors can get back in.
+  const recreate = useMutation({
+    mutationFn: (templateId: string) => createVersion(templateId),
+    onSuccess: (v) => navigate(`/editor/${v.id}`),
+    onError: () => toast.error('Could not create version'),
+  })
+
+  function openTemplate(
+    templateId: string,
+    versions?: { id: string; version_number: number }[],
+  ) {
+    if (versions?.length) {
+      const latest = versions.reduce(
+        (a, b) => (b.version_number > a.version_number ? b : a),
+        versions[0],
+      )
+      navigate(`/editor/${latest.id}`)
+      return
+    }
+    // No versions left — recreate one (editors only; managers have nothing to open).
+    if (!isEditor) {
+      toast.info('This template has no versions yet')
+      return
+    }
+    if (!recreate.isPending) recreate.mutate(templateId)
   }
 
   return (
@@ -98,11 +117,11 @@ export function DashboardPage() {
             {filtered.map((t) => (
               <Card
                 key={t.id}
-                className="group relative overflow-hidden transition hover:shadow-lg"
+                className="group relative gap-0 overflow-hidden rounded-2xl border-0 p-0 shadow-sm transition hover:shadow-xl"
               >
                 {isEditor && (
-                  <div className="absolute right-2 top-2 z-10">
-                    <ConfirmDialog
+                  <div className="absolute right-3 top-3 z-20">
+                    <ConfirmPopover
                       trigger={
                         <Button
                           variant="secondary"
@@ -114,40 +133,47 @@ export function DashboardPage() {
                         </Button>
                       }
                       title={`Delete “${t.name}”?`}
-                      description="This permanently deletes the template and all its versions, layers, translations and ratio variants. This cannot be undone."
+                      description="Permanently deletes this template and all its versions, layers, translations and ratio variants. This cannot be undone."
                       onConfirm={() => del.mutate(t.id)}
                     />
                   </div>
                 )}
 
                 <button
-                  onClick={() => openLatest(t.versions)}
-                  className="block w-full text-left"
+                  onClick={() => openTemplate(t.id, t.versions)}
+                  className="relative block aspect-square w-full overflow-hidden bg-muted text-left"
                 >
-                  <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted">
-                    <img
-                      src={t.blank_image_url}
-                      alt={t.name}
-                      className="h-full w-full object-cover transition group-hover:scale-[1.02]"
-                      onError={(e) => {
-                        ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-                      }}
-                    />
-                  </div>
-                  <CardContent className="py-3">
-                    <div className="flex items-center justify-between">
-                      <p className="truncate font-semibold">{t.name}</p>
-                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-wide text-secondary-foreground">
+                  <img
+                    src={t.blank_image_url}
+                    alt={t.name}
+                    className="absolute inset-0 h-full w-full object-contain transition duration-300 group-hover:scale-[1.03]"
+                    onError={(e) => {
+                      ;(e.currentTarget as HTMLImageElement).style.visibility = 'hidden'
+                    }}
+                  />
+
+                  <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-neutral-950/95 px-5 py-4 text-white shadow-lg backdrop-blur-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-lime-400">
+                        <span className="h-2 w-2 rounded-full bg-lime-400" />
                         {t.category}
                       </span>
+                      <span className="truncate text-[11px] font-medium uppercase tracking-[0.2em] text-white/40">
+                        {t.name}
+                      </span>
                     </div>
-                    <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                      <Layers className="h-3 w-3" />
-                      {t.dimensions_json.w} × {t.dimensions_json.h} ·{' '}
-                      {t.versions?.length ?? 0} version
-                      {(t.versions?.length ?? 0) === 1 ? '' : 's'}
+                    <p className="mt-2 truncate text-2xl font-extrabold leading-tight">
+                      {t.name}
                     </p>
-                  </CardContent>
+                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-white/40">
+                      <Layers className="h-3 w-3" />
+                      {(t.versions?.length ?? 0) === 0
+                        ? isEditor
+                          ? 'No versions · click to start one'
+                          : 'No versions yet'
+                        : `${t.versions!.length} version${t.versions!.length === 1 ? '' : 's'}`}
+                    </p>
+                  </div>
                 </button>
               </Card>
             ))}

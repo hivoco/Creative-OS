@@ -189,13 +189,11 @@ export interface VideoJob {
 }
 
 export const LANGUAGES: Array<{ code: string; label: string }> = [
-  { code: 'en', label: 'English' },
   { code: 'hi', label: 'Hindi' },
-  { code: 'ta', label: 'Tamil' },
-  { code: 'te', label: 'Telugu' },
+  { code: 'en', label: 'English' },
   { code: 'bn', label: 'Bengali' },
-  { code: 'gu', label: 'Gujarati' },
   { code: 'mr', label: 'Marathi' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'fr', label: 'French' },
+  { code: 'te', label: 'Telugu' },
+  { code: 'ta', label: 'Tamil' },
+  { code: 'gu', label: 'Gujarati' },
 ]

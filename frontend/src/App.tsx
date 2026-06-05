@@ -1,21 +1,21 @@
-import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
-import { Toaster } from '@/components/ui/sonner'
+import { Toaster } from "@/components/ui/sonner";
 
-import { RequireAuth } from '@/components/RequireAuth'
-import { RequireAdmin } from '@/components/RequireAdmin'
-import { LoginPage } from '@/pages/LoginPage'
-import { ToolPickerPage } from '@/pages/ToolPickerPage'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { VideoPage } from '@/pages/VideoPage'
-import { EditorPage } from '@/pages/EditorPage'
-import { BrandsAdminPage } from '@/pages/admin/BrandsAdminPage'
-import { BrandDetailPage } from '@/pages/admin/BrandDetailPage'
+import { RequireAuth } from "@/components/RequireAuth";
+import { RequireAdmin } from "@/components/RequireAdmin";
+import { LoginPage } from "@/pages/LoginPage";
+import { ToolPickerPage } from "@/pages/ToolPickerPage";
+import { DashboardPage } from "@/pages/DashboardPage";
+import { VideoPage } from "@/pages/VideoPage";
+import { EditorPage } from "@/pages/EditorPage";
+import { BrandsAdminPage } from "@/pages/admin/BrandsAdminPage";
+import { BrandDetailPage } from "@/pages/admin/BrandDetailPage";
 
 // Remount the editor on version switch so transient state resets cleanly.
 function EditorRoute() {
-  const { versionId } = useParams()
-  return <EditorPage key={versionId} />
+  const { versionId } = useParams();
+  return <EditorPage key={versionId} />;
 }
 
 export default function App() {
@@ -31,6 +31,7 @@ export default function App() {
             </RequireAuth>
           }
         />
+
         <Route
           path="/templates"
           element={
@@ -39,6 +40,7 @@ export default function App() {
             </RequireAuth>
           }
         />
+
         <Route
           path="/video"
           element={
@@ -75,5 +77,5 @@ export default function App() {
       </Routes>
       <Toaster />
     </>
-  )
+  );
 }

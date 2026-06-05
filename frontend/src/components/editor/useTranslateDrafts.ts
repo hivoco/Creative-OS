@@ -8,29 +8,47 @@ import { LANGUAGE_FONT, langLabel } from '@/lib/constants'
 import type { TextLayer } from '@/types'
 
 /**
- * Translation-drafts workflow: translate source→current language into reviewable
- * drafts (no auto-apply), then apply per-layer or all at once with a
- * script-appropriate font, carrying the source layer's other style.
+ * Translation-drafts workflow. Adding a language always translates from the
+ * version's *original* (`sourceLang`) — never from whatever variant the user is
+ * currently viewing — so translations don't drift by being made from another
+ * translation. `start(target)` takes the source text of every layer, converts it
+ * `sourceLang` → `target`, and produces reviewable drafts. Applying saves the
+ * result under `target` with a script-appropriate font, carrying the source
+ * layer's other style.
  */
 export function useTranslateDrafts(params: {
-  language: string
-  sourceLanguage: string
+  /** The version's original language — translations are always made from this. */
+  sourceLang: string
   layers: TextLayer[]
-  onApplied: () => void
+  /** Called after drafts are saved, with the language they were saved under. */
+  onApplied: (target: string) => void
 }) {
-  const { language, sourceLanguage, layers, onApplied } = params
+  const { sourceLang, layers, onApplied } = params
   const [drafts, setDrafts] = useState<TranslationDraft[] | null>(null)
-  const [draftSource, setDraftSource] = useState('en')
   const [applying, setApplying] = useState(false)
+  // The language being added — set when start() runs, read when applying.
+  const [targetLang, setTargetLang] = useState('')
 
-  async function start() {
-    if (language === sourceLanguage) {
-      toast.info('Switch to a different language to translate into it')
+  // The original text we translate from: the source language, else any
+  // translation that has content (so a version authored in another language
+  // still works), else the first row.
+  function sourceTranslation(l: TextLayer) {
+    return (
+      l.translations.find((t) => t.language_code === sourceLang) ??
+      l.translations.find((t) => deltaToPlainText(t.content_delta).trim()) ??
+      l.translations[0]
+    )
+  }
+
+  async function start(target: string) {
+    if (target === sourceLang) {
+      toast.info('That language is already the source')
       return
     }
+    setTargetLang(target)
     const items = layers
       .map((l) => {
-        const src = l.translations.find((t) => t.language_code === sourceLanguage)
+        const src = sourceTranslation(l)
         return {
           layerId: l.id,
           layerKey: l.layer_key,
@@ -40,17 +58,16 @@ export function useTranslateDrafts(params: {
       .filter((i) => i.sourceText.trim())
 
     if (!items.length) {
-      toast.info(`No ${langLabel(sourceLanguage)} text to translate from`)
+      toast.info('Add some text to a layer before translating')
       return
     }
     try {
       toast.loading('Translating…', { id: 'tr' })
       const translated = await translateTexts(
         items.map((i) => i.sourceText),
-        langLabel(sourceLanguage),
-        langLabel(language),
+        langLabel(sourceLang),
+        langLabel(target),
       )
-      setDraftSource(sourceLanguage)
       setDrafts(items.map((i, idx) => ({ ...i, translatedText: translated[idx] ?? '' })))
       toast.success('Review the translation', { id: 'tr' })
     } catch {
@@ -60,11 +77,11 @@ export function useTranslateDrafts(params: {
 
   function payloadFor(layerId: string, translatedText: string) {
     const layer = layers.find((l) => l.id === layerId)
-    const src = layer?.translations.find((t) => t.language_code === draftSource)
+    const src = layer ? sourceTranslation(layer) : undefined
     return {
       content_delta: plainTextToDelta(translatedText),
       plain_text: translatedText,
-      font_family_override: LANGUAGE_FONT[language] ?? src?.font_family_override ?? null,
+      font_family_override: LANGUAGE_FONT[targetLang] ?? src?.font_family_override ?? null,
       font_weight_override: src?.font_weight_override ?? null,
       italic_override: src?.italic_override ?? null,
       font_size_override: src?.font_size_override ?? null,
@@ -74,14 +91,29 @@ export function useTranslateDrafts(params: {
     }
   }
 
+  function editDraft(layerId: string, text: string) {
+    setDrafts(
+      (prev) =>
+        prev?.map((d) => (d.layerId === layerId ? { ...d, translatedText: text } : d)) ??
+        null,
+    )
+  }
+
+  function skip(layerId: string) {
+    setDrafts((prev) => {
+      const next = prev?.filter((d) => d.layerId !== layerId) ?? null
+      return next && next.length ? next : null
+    })
+  }
+
   async function applyOne(layerId: string) {
     const draft = drafts?.find((d) => d.layerId === layerId)
     if (!draft) return
     setApplying(true)
     try {
-      await saveTranslation(layerId, language, payloadFor(layerId, draft.translatedText))
+      await saveTranslation(layerId, targetLang, payloadFor(layerId, draft.translatedText))
       setDrafts((prev) => prev?.filter((d) => d.layerId !== layerId) ?? null)
-      onApplied()
+      onApplied(targetLang)
     } catch {
       toast.error('Could not apply')
     } finally {
@@ -92,25 +124,30 @@ export function useTranslateDrafts(params: {
   async function applyAll() {
     if (!drafts) return
     setApplying(true)
-    try {
-      for (const d of drafts) {
-        await saveTranslation(d.layerId, language, payloadFor(d.layerId, d.translatedText))
+    // Apply each independently so one failure doesn't abort the rest; keep any
+    // that failed in the panel so they can be retried.
+    const failed: TranslationDraft[] = []
+    for (const d of drafts) {
+      try {
+        await saveTranslation(d.layerId, targetLang, payloadFor(d.layerId, d.translatedText))
+      } catch {
+        failed.push(d)
       }
-      setDrafts(null)
-      onApplied()
-      toast.success('Applied translation')
-    } catch {
-      toast.error('Could not apply all')
-    } finally {
-      setApplying(false)
     }
+    setDrafts(failed.length ? failed : null)
+    onApplied(targetLang)
+    setApplying(false)
+    if (failed.length) toast.error(`Could not apply ${failed.length} layer(s)`)
+    else toast.success('Applied translation')
   }
 
   return {
     drafts,
-    draftSource,
     applying,
+    targetLang,
     start,
+    editDraft,
+    skip,
     applyOne,
     applyAll,
     clear: () => setDrafts(null),

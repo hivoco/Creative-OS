@@ -1,20 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Upload } from 'lucide-react'
+import { Loader2, Upload } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { createTemplate } from '@/lib/services'
 
 export function UploadTemplateDialog() {
@@ -53,24 +45,23 @@ export function UploadTemplateDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button className="h-11">
           <Upload className="mr-1.5 h-4 w-4" />
           Upload template
         </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Upload blank template</DialogTitle>
-          <DialogDescription>
-            Upload a PNG/JPG with no text baked in. Text is composited at render
-            time.
-          </DialogDescription>
-        </DialogHeader>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={8} className="w-80 space-y-4">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold">Upload blank template</p>
+          <p className="text-xs text-muted-foreground">
+            A PNG/JPG with no text baked in — text is composited at render time.
+          </p>
+        </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
+        <div className="space-y-3">
+          <div className="space-y-1.5">
             <Label htmlFor="t-name">Name</Label>
             <Input
               id="t-name"
@@ -79,7 +70,7 @@ export function UploadTemplateDialog() {
               placeholder="Summer Sale Poster"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="t-cat">Category</Label>
             <Input
               id="t-cat"
@@ -88,7 +79,7 @@ export function UploadTemplateDialog() {
               placeholder="campaign"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="t-file">Blank image</Label>
             <Input
               id="t-file"
@@ -104,15 +95,20 @@ export function UploadTemplateDialog() {
           )}
         </div>
 
-        <DialogFooter>
-          <Button
-            disabled={!name || !file || mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? 'Uploading…' : 'Create template'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <Button
+          className="w-full"
+          disabled={!name || !file || mutation.isPending}
+          onClick={() => mutation.mutate()}
+        >
+          {mutation.isPending ? (
+            <>
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Uploading…
+            </>
+          ) : (
+            'Create template'
+          )}
+        </Button>
+      </PopoverContent>
+    </Popover>
   )
 }

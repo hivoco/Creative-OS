@@ -74,14 +74,16 @@ export function LayerInspector({
     () => layer.translations.find((t) => t.language_code === language),
     [layer.translations, language],
   )
-  // When the target language has no text yet, seed from the source language so
-  // the editor shows the text to work from (autosave only fires on real edits).
+  // When this language has no text yet, seed from any translation that has
+  // content so the editor shows the text to work from (autosave only fires on
+  // real edits).
   const seed = useMemo(
     () =>
       serverTranslation ??
       (sourceLanguage
         ? layer.translations.find((t) => t.language_code === sourceLanguage)
-        : undefined),
+        : undefined) ??
+      layer.translations.find((t) => deltaToPlainText(t.content_delta).trim()),
     [serverTranslation, layer.translations, sourceLanguage],
   )
 
@@ -195,6 +197,7 @@ export function LayerInspector({
           placeholder={editable ? 'Type here…' : 'Read-only'}
           fontFamily={style.font_family}
           autoFocus={editable}
+          readOnly={!editable}
         />
       </div>
 
@@ -230,6 +233,7 @@ export function LayerInspector({
             <ColorInput
               value={layer.default_bg_color ?? ''}
               onChange={(v) => onPatchLayer(layer.id, { default_bg_color: v || null })}
+              disabled={!editable}
             />
             {layer.default_bg_color && editable && (
               <button

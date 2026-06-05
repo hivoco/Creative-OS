@@ -43,6 +43,24 @@ export async function deleteVideoJob(id: string): Promise<void> {
   await api.delete(`/video/jobs/${id}`)
 }
 
+/**
+ * Download a finished video to disk.
+ *
+ * The video lives on S3, so a plain `<a download>` is ignored (cross-origin)
+ * and the file just opens in a tab. Instead we ask the backend for a
+ * short-lived presigned URL whose response forces an `attachment` disposition,
+ * then click an anchor pointed at it — the browser saves the MP4.
+ */
+export async function downloadVideoJob(id: string): Promise<void> {
+  const { data } = await api.get<{ url: string }>(`/video/jobs/${id}/download`)
+  const a = document.createElement('a')
+  a.href = data.url
+  a.rel = 'noreferrer'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 /** Format a UTC ISO timestamp as IST date-time. */
 export function istDateTime(iso: string): string {
   if (!iso) return ''

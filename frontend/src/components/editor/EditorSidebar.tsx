@@ -21,6 +21,8 @@ interface Props {
   layers: TextLayer[]
   selected: TextLayer | null
   selectedLayerId: string | null
+  // Bumped after an apply so the inspector remounts and re-seeds from fresh data.
+  seedNonce: number
   drafts: TranslationDraft[] | null
   draftSourceLabel: string
   targetLabel: string
@@ -33,6 +35,8 @@ interface Props {
   onTranslationSaved: () => void
   onCreateVersion: () => void
   onStatusChange: () => void
+  onEditDraft: (layerId: string, text: string) => void
+  onSkipDraft: (layerId: string) => void
   onApplyDraft: (layerId: string) => void
   onApplyAllDrafts: () => void
   onCloseDrafts: () => void
@@ -49,6 +53,7 @@ export function EditorSidebar(props: Props) {
     layers,
     selected,
     selectedLayerId,
+    seedNonce,
     drafts,
     draftSourceLabel,
     targetLabel,
@@ -61,6 +66,8 @@ export function EditorSidebar(props: Props) {
     onTranslationSaved,
     onCreateVersion,
     onStatusChange,
+    onEditDraft,
+    onSkipDraft,
     onApplyDraft,
     onApplyAllDrafts,
     onCloseDrafts,
@@ -93,6 +100,8 @@ export function EditorSidebar(props: Props) {
                 sourceLabel={draftSourceLabel}
                 targetLabel={targetLabel}
                 applying={applying}
+                onEdit={onEditDraft}
+                onSkip={onSkipDraft}
                 onApply={onApplyDraft}
                 onApplyAll={onApplyAllDrafts}
                 onClose={onCloseDrafts}
@@ -135,7 +144,7 @@ export function EditorSidebar(props: Props) {
             <>
               <Separator />
               <LayerInspector
-                key={`${selected.id}-${language}`}
+                key={`${selected.id}-${language}-${seedNonce}`}
                 versionId={versionId}
                 layer={selected}
                 language={language}

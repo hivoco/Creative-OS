@@ -13,14 +13,16 @@ import type { TranslationPayload } from '@/components/editor/useAutoSave'
 import {
   createVersion,
   deleteVersion,
+  getBlankImageBlob,
   getTemplate,
   getVersionContext,
   listLayers,
   updateLayer,
 } from '@/lib/services'
 import { langLabel } from '@/lib/constants'
-import { API_BASE_URL, getToken } from '@/lib/api'
-import type { LayerTranslation, TextLayer } from '@/types'
+import { deltaToPlainText } from '@/lib/delta'
+import { renderVersionWithBlank } from '@/lib/canvasRenderer'
+import { LANGUAGES, type LayerTranslation, type TextLayer } from '@/types'
 import { useAuth } from '@/store/auth'
 
 interface Preview {
@@ -34,10 +36,18 @@ export function EditorPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isEditor = user?.role === 'editor'
+  // Managers get a view-only canvas: it looks like the finished image (no boxes,
+  // nothing auto-selected) until they click a layer, which then shows a border.
+  const isManager = user?.role === 'manager'
 
-  const [language, setLanguage] = useState('en')
-  // The language we last came from — the translation source + display fallback.
-  const [sourceLanguage, setSourceLanguage] = useState('en')
+  // `editLang` is the active language variant: what the canvas / inspector /
+  // export read & write. The user switches it from the header dropdown; on first
+  // load it's auto-detected to whichever language already has content.
+  const [editLang, setEditLang] = useState('en')
+  // Version id we last auto-detected the active variant for (re-runs on switch).
+  const [detectedFor, setDetectedFor] = useState<string | null>(null)
+  // Bumped after an apply to force the inspector to re-seed from fresh data.
+  const [applyNonce, setApplyNonce] = useState(0)
   // undefined = nothing chosen yet (auto-select first); null = explicitly
   // deselected (e.g. clicked empty canvas).
   const [selectedId, setSelectedId] = useState<string | null | undefined>(undefined)
@@ -54,12 +64,18 @@ export function EditorPage() {
     return () => document.body.classList.remove('theme-neutral')
   }, [])
 
-  function switchLanguage(next: string) {
-    if (next === language) return
-    setSourceLanguage(language) // remember where we came from
-    setLanguage(next)
+  // Switch which existing language variant the canvas shows / edits.
+  function switchVariant(next: string) {
+    if (next === editLang) return
+    setEditLang(next)
     setPreview(null)
-    drafts.clear()
+  }
+
+  // Translate the version into a not-yet-present language. Source is always the
+  // original (most-complete) language — never the variant currently in view —
+  // so we don't translate a translation. Opens the draft panel to review first.
+  function addLanguage(code: string) {
+    void drafts.start(code)
   }
 
   const ctx = useQuery({
@@ -111,8 +127,39 @@ export function EditorPage() {
     })
   }, [layersQuery.data, edits, preview])
 
+  // Per-version language stats from saved content: which languages are "present"
+  // (have text in any layer) and which is the "source" — the original, taken as
+  // the most-complete language. Translations are always made from the source.
+  const { present, source } = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const l of layersQuery.data ?? []) {
+      for (const tr of l.translations) {
+        if (deltaToPlainText(tr.content_delta).trim()) {
+          counts[tr.language_code] = (counts[tr.language_code] ?? 0) + 1
+        }
+      }
+    }
+    const present = LANGUAGES.filter((l) => counts[l.code]).map((l) => l.code)
+    const source = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'en'
+    return { present, source }
+  }, [layersQuery.data])
+
+  // The variants the dropdown offers: present languages, plus the active one so
+  // a brand-new (contentless) version still shows its working language.
+  const variantCodes = LANGUAGES.filter(
+    (l) => present.includes(l.code) || l.code === editLang,
+  ).map((l) => l.code)
+
+  // On first load (and on version switch), point the active variant at the
+  // source so the canvas shows text instead of an empty slot. Derived during
+  // render (not an effect) to avoid a cascading re-render.
+  if (detectedFor !== versionId && layersQuery.data?.length) {
+    setEditLang(source)
+    setDetectedFor(versionId)
+  }
+
   const selectedLayerId =
-    selectedId === undefined ? (layers[0]?.id ?? null) : selectedId
+    selectedId === undefined ? (isManager ? null : (layers[0]?.id ?? null)) : selectedId
   const selected = layers.find((l) => l.id === selectedLayerId) ?? null
   const template = ctx.data?.template
 
@@ -131,10 +178,17 @@ export function EditorPage() {
     (ctx.data?.version.status === 'draft' || ctx.data?.version.status === 'rejected')
 
   const drafts = useTranslateDrafts({
-    language,
-    sourceLanguage,
+    sourceLang: source,
     layers,
-    onApplied: () => void layersQuery.refetch(),
+    // The applied translation is saved under `target`; switch the active variant
+    // there to show it. Clear the live preview + re-seed the inspector so the old
+    // (pre-translation) text stops masking the result.
+    onApplied: (target) => {
+      setEditLang(target)
+      setPreview(null)
+      setApplyNonce((n) => n + 1)
+      void layersQuery.refetch()
+    },
   })
 
   const actions = useLayerActions({
@@ -191,16 +245,27 @@ export function EditorPage() {
     }
   }
 
-  function exportImage() {
-    const url = `${API_BASE_URL}/versions/${versionId}/render?language=${language}&fmt=png`
-    fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => {
-        if (!r.ok) throw new Error()
-        return r.blob()
+  // Render the design to an image in the browser (same engine as the canvas),
+  // so the export looks exactly like what's on screen — wrapped text and all.
+  // The blank is fetched through our API so the canvas isn't CORS-tainted.
+  async function exportImage() {
+    if (!template) return
+    try {
+      const blank = await getBlankImageBlob(versionId)
+      const blob = await renderVersionWithBlank(blank, {
+        width: template.dimensions_json.w,
+        height: template.dimensions_json.h,
+        layers,
+        language: editLang,
+        sourceLanguage: source,
+        format: 'png',
       })
-      .then((blob) => window.open(URL.createObjectURL(blob), '_blank'))
-      .catch(() => toast.error('Render failed (is the blank image present?)'))
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Export failed')
+    }
   }
+
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -211,14 +276,18 @@ export function EditorPage() {
         versionStatus={ctx.data?.version.status}
         versions={versions}
         blankImageUrl={template?.blank_image_url}
+        sourceWidth={template?.dimensions_json.w}
+        sourceHeight={template?.dimensions_json.h}
         layers={layers}
-        language={language}
+        activeLanguage={editLang}
+        presentLanguages={variantCodes}
+        sourceLanguage={source}
         editable={!!editable}
         isEditor={isEditor}
         onSwitchVersion={(vid) => navigate(`/editor/${vid}`)}
         onDeleteVersion={deleteCurrentVersion}
-        onSwitchLanguage={switchLanguage}
-        onTranslate={drafts.start}
+        onSwitchVariant={switchVariant}
+        onAddLanguage={addLanguage}
         onExport={exportImage}
       />
 
@@ -231,9 +300,9 @@ export function EditorPage() {
               width={template.dimensions_json.w}
               height={template.dimensions_json.h}
               layers={layers}
-              language={language}
-              sourceLanguage={sourceLanguage}
+              language={editLang}
               selectedLayerId={selectedLayerId}
+              readOnly={isManager}
               onSelect={setSelectedId}
               onMove={handleMove}
               onResize={editable ? (id, box) => patchLayer(id, box) : undefined}
@@ -249,14 +318,15 @@ export function EditorPage() {
           versionStatus={ctx.data?.version.status}
           isEditor={isEditor}
           editable={!!editable}
-          language={language}
-          sourceLanguage={sourceLanguage}
+          language={editLang}
+          sourceLanguage={source}
           layers={layers}
           selected={selected}
           selectedLayerId={selectedLayerId}
+          seedNonce={applyNonce}
           drafts={drafts.drafts}
-          draftSourceLabel={langLabel(drafts.draftSource)}
-          targetLabel={langLabel(language)}
+          draftSourceLabel={langLabel(source)}
+          targetLabel={langLabel(drafts.targetLang)}
           applying={drafts.applying}
           onSelectLayer={setSelectedId}
           onAddLayer={actions.addLayer}
@@ -266,6 +336,8 @@ export function EditorPage() {
           onTranslationSaved={() => void layersQuery.refetch()}
           onCreateVersion={createNewVersion}
           onStatusChange={() => void ctx.refetch()}
+          onEditDraft={drafts.editDraft}
+          onSkipDraft={drafts.skip}
           onApplyDraft={drafts.applyOne}
           onApplyAllDrafts={drafts.applyAll}
           onCloseDrafts={drafts.clear}

@@ -70,16 +70,21 @@ export const ColorInput = ({
   onChange,
   presets,
   id,
+  disabled,
 }: {
   value: string
   onChange: (next: string) => void
   presets?: readonly string[]
   id?: string
+  disabled?: boolean
 }) => (
   <div className="flex flex-wrap items-center gap-2">
     <label
       htmlFor={id}
-      className="relative size-9 cursor-pointer overflow-hidden rounded-md border border-input shadow-xs"
+      className={cn(
+        'relative size-9 overflow-hidden rounded-md border border-input shadow-xs',
+        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+      )}
       style={{ backgroundColor: value }}
     >
       <input
@@ -87,12 +92,14 @@ export const ColorInput = ({
         type="color"
         value={(value || '#000000').slice(0, 7)}
         onChange={(e) => onChange(e.target.value)}
-        className="absolute inset-0 size-full cursor-pointer opacity-0"
+        disabled={disabled}
+        className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
       />
     </label>
     <FieldInput
       value={(value || '').toUpperCase()}
       onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
       spellCheck={false}
       className="w-28 font-mono uppercase"
     />
@@ -102,10 +109,12 @@ export const ColorInput = ({
           <button
             key={preset}
             type="button"
+            disabled={disabled}
             aria-label={`Use color ${preset}`}
             onClick={() => onChange(preset)}
             className={cn(
               'size-6 rounded-md border border-border shadow-xs transition-transform hover:scale-110',
+              'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100',
               value.toLowerCase() === preset.toLowerCase() && 'ring-2 ring-ring',
             )}
             style={{ backgroundColor: preset }}

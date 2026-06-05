@@ -29,6 +29,12 @@ interface Props {
   sourceLanguage?: string
   /** Scale the canvas to fully fit its parent (no page scroll). */
   fit?: boolean
+  /**
+   * View-only mode (managers): the canvas looks like the finished image —
+   * unselected layers show no outline — and clicking a layer only selects it
+   * (showing a border) without ever dragging it.
+   */
+  readOnly?: boolean
 }
 
 type Dir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
@@ -59,6 +65,7 @@ export function TemplateCanvas({
   onCommit,
   sourceLanguage,
   fit,
+  readOnly,
 }: Props) {
   const moved = useRef(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -98,14 +105,17 @@ export function TemplateCanvas({
     box: Required<LayerBox>
   } | null>(null)
 
-  // Prefer the current language; fall back to the source language so a not-yet-
-  // translated layer still shows text instead of an empty placeholder.
+  // The canvas just shows the layer's text — it isn't tied to a user-picked
+  // language. Prefer the render language, then any translation that actually
+  // has content, so a layer never shows an empty placeholder when text exists.
   function translationFor(layer: TextLayer) {
     return (
       layer.translations.find((tr) => tr.language_code === language) ??
       (sourceLanguage
         ? layer.translations.find((tr) => tr.language_code === sourceLanguage)
-        : undefined)
+        : undefined) ??
+      layer.translations.find((tr) => deltaToPlainText(tr.content_delta).trim()) ??
+      layer.translations[0]
     )
   }
 
@@ -131,6 +141,7 @@ export function TemplateCanvas({
     e.preventDefault()
     e.stopPropagation() // don't let the frame's deselect handler fire
     onSelect(layer.id)
+    if (readOnly) return // view-only: select to show a border, but never drag
     moved.current = false
     drag.current = {
       id: layer.id,
@@ -254,10 +265,14 @@ export function TemplateCanvas({
             key={layer.id}
             onPointerDown={(e) => startMove(e, layer)}
             className={cn(
-              'absolute box-border cursor-move touch-none select-none whitespace-pre-wrap wrap-break-word px-1',
+              'absolute box-border touch-none select-none whitespace-pre-wrap wrap-break-word px-1',
+              readOnly ? 'cursor-pointer' : 'cursor-move',
               selected
                 ? 'outline-2 outline-offset-1 outline-foreground'
-                : 'outline-1 outline-dotted outline-offset-1 outline-foreground/20',
+                : // Managers see a clean image — only the clicked layer gets a box.
+                  readOnly
+                  ? ''
+                  : 'outline-1 outline-dotted outline-offset-1 outline-foreground/20',
             )}
             style={{
               left: `${layer.x_percent}%`,

@@ -78,6 +78,10 @@ import { LANGUAGES } from '@/types'
 export const langLabel = (code: string) =>
   LANGUAGES.find((l) => l.code === code)?.label ?? code
 
+/** Turn an enum status like `in_review` into Title Case ("In Review"). */
+export const statusLabel = (status?: string) =>
+  (status ?? '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
 export const PRESET_LAYER_KEYS = [
   'headline',
   'subheading',

@@ -1,22 +1,19 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Mic, Plus } from 'lucide-react'
+import { Loader2, Mic, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cloneVoice } from '@/lib/videoServices'
 
+/**
+ * Clone a voice from a short audio sample. Presented as a contextual popover
+ * anchored to its trigger (rather than a page-blocking centered modal), so the
+ * voice picker stays visible while you add a new one.
+ */
 export function CloneVoiceDialog({ onCloned }: { onCloned?: (voiceId: string) => void }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -42,60 +39,63 @@ export function CloneVoiceDialog({ onCloned }: { onCloned?: (voiceId: string) =>
   })
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button type="button" variant="outline" size="sm">
           <Plus className="mr-1 h-4 w-4" /> Clone voice
         </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={8} className="w-80 space-y-3">
+        <div className="space-y-1">
+          <p className="flex items-center gap-2 text-sm font-semibold">
             <Mic className="h-4 w-4" /> Clone a voice
-          </DialogTitle>
-          <DialogDescription>
-            Upload a short, clean audio sample (10–30s) of the voice to clone.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="v-title">Voice name</Label>
-            <Input
-              id="v-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Brand Narrator"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="v-desc">Description (optional)</Label>
-            <Input
-              id="v-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="v-file">Audio sample</Label>
-            <Input
-              id="v-file"
-              type="file"
-              accept="audio/*"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </div>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Upload a short, clean sample (10–30s) of the voice to clone.
+          </p>
         </div>
 
-        <DialogFooter>
-          <Button
-            disabled={!title || !file || mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? 'Cloning…' : 'Clone voice'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <div className="space-y-1.5">
+          <Label htmlFor="v-title">Voice name</Label>
+          <Input
+            id="v-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Brand Narrator"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="v-desc">Description (optional)</Label>
+          <Input
+            id="v-desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="v-file">Audio sample</Label>
+          <Input
+            id="v-file"
+            type="file"
+            accept="audio/*"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        </div>
+
+        <Button
+          className="w-full"
+          disabled={!title || !file || mutation.isPending}
+          onClick={() => mutation.mutate()}
+        >
+          {mutation.isPending ? (
+            <>
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Cloning…
+            </>
+          ) : (
+            'Clone voice'
+          )}
+        </Button>
+      </PopoverContent>
+    </Popover>
   )
 }

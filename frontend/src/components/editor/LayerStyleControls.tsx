@@ -118,6 +118,7 @@ export function LayerStyleControls({ style, editable, onChange }: Props) {
           value={style.color}
           onChange={(v) => onChange({ color: v })}
           presets={COLOR_PRESETS}
+          disabled={!editable}
         />
       </div>
 

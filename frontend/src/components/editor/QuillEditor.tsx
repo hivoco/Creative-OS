@@ -11,6 +11,8 @@ interface Props {
   fontFamily?: string
   /** Focus the editor (cursor at end) once mounted. */
   autoFocus?: boolean
+  /** View-only: disable typing and hide the formatting toolbar. */
+  readOnly?: boolean
 }
 
 const TOOLBAR = [
@@ -27,6 +29,7 @@ export function QuillEditor({
   placeholder,
   fontFamily,
   autoFocus,
+  readOnly,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const quillRef = useRef<Quill | null>(null)
@@ -42,7 +45,8 @@ export function QuillEditor({
     const quill = new Quill(containerRef.current, {
       theme: 'snow',
       placeholder,
-      modules: { toolbar: TOOLBAR },
+      readOnly,
+      modules: { toolbar: readOnly ? false : TOOLBAR },
     })
     quillRef.current = quill
 
@@ -72,6 +76,11 @@ export function QuillEditor({
       quill.setContents((value ?? { ops: [] }) as never, 'silent')
     }
   }, [value])
+
+  // Toggle editability if read-only flips after mount (e.g. version is approved).
+  useEffect(() => {
+    quillRef.current?.enable(!readOnly)
+  }, [readOnly])
 
   return (
     <div className="rounded-md border border-border bg-background">
