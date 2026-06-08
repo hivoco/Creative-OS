@@ -1,11 +1,16 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { Toaster } from "@/components/ui/sonner";
 
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireAdmin } from "@/components/RequireAdmin";
+import { getToken } from "@/lib/api";
 import { LoginPage } from "@/pages/LoginPage";
 import { ToolPickerPage } from "@/pages/ToolPickerPage";
+
+// Heavy (three.js/vanta) marketing hero — only loaded for logged-out visitors.
+const LandingPage = lazy(() => import("@/components/LandingPage"));
 import { DashboardPage } from "@/pages/DashboardPage";
 import { VideoPage } from "@/pages/VideoPage";
 import { EditorPage } from "@/pages/EditorPage";
@@ -18,19 +23,29 @@ function EditorRoute() {
   return <EditorPage key={versionId} />;
 }
 
+// Logged-out visitors see the marketing landing page; signed-in users get the
+// tool picker (RequireAuth handles session loading + redirects).
+function RootRoute() {
+  if (!getToken()) {
+    return (
+      <Suspense fallback={null}>
+        <LandingPage />
+      </Suspense>
+    );
+  }
+  return (
+    <RequireAuth>
+      <ToolPickerPage />
+    </RequireAuth>
+  );
+}
+
 export default function App() {
   return (
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <ToolPickerPage />
-            </RequireAuth>
-          }
-        />
+        <Route path="/" element={<RootRoute />} />
 
         <Route
           path="/templates"

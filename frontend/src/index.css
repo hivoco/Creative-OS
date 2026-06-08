@@ -39,6 +39,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Hivoco lime-green ramp (used by the marketing landing page). */
+  --hv-green: #c1ff72;
+  --hv-green-light: #d6ff9c;
+  --hv-green-deep: #9fe04a;
+  --hv-green-hover: #b0f255;
+  --hv-ink: #131313;
 }
 
 .dark {
@@ -121,6 +127,10 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-hv-green: var(--hv-green);
+  --color-hv-green-light: var(--hv-green-light);
+  --color-hv-green-deep: var(--hv-green-deep);
+  --color-hv-green-hover: var(--hv-green-hover);
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
     Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
@@ -138,6 +148,10 @@
     background-image: radial-gradient(oklch(0.82 0 0) 1px, transparent 1.4px);
     background-size: 22px 22px;
     background-attachment: fixed;
+  }
+  /* The landing hero renders its own Vanta globe background. */
+  body:has(.landing-hero) {
+    background-image: none;
   }
 }
 
