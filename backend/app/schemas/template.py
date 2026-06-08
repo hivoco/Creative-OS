@@ -29,6 +29,8 @@ class TemplateVersionOut(BaseModel):
     created_by: str
     version_number: int
     status: str
+    # The original/authoring language; null until the first content is saved.
+    source_language: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

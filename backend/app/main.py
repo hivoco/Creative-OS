@@ -7,7 +7,17 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.routers import admin, auth, layers, render, review, templates, translate, video
+from app.routers import (
+    admin,
+    auth,
+    layers,
+    render,
+    review,
+    templates,
+    translate,
+    video,
+    video_review,
+)
 from app.services import gemini
 from app.services.bootstrap import ensure_superadmin
 from app.services.storage import ensure_upload_dir
@@ -45,6 +55,7 @@ app.include_router(translate.router)
 app.include_router(render.router)
 app.include_router(review.router)
 app.include_router(video.router)
+app.include_router(video_review.router)
 
 
 @app.get("/health")

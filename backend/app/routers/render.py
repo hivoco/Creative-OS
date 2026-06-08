@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+import io
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -94,6 +96,10 @@ def _layers_payload(db: Session, version_id: str) -> list[dict]:
                         "line_height_override": t.line_height_override,
                         "letter_spacing_override": t.letter_spacing_override,
                         "color_override": t.color_override,
+                        "x_percent_override": t.x_percent_override,
+                        "y_percent_override": t.y_percent_override,
+                        "width_percent_override": t.width_percent_override,
+                        "height_percent_override": t.height_percent_override,
                     }
                     for t in layer.translations
                 ],
@@ -160,6 +166,26 @@ def render_version(
 
     media = "image/jpeg" if fmt.lower() in ("jpg", "jpeg") else "image/png"
     return Response(content=image_bytes, media_type=media)
+
+
+@router.get("/versions/{version_id}/blank-image")
+def get_blank_image(
+    version_id: str,
+    current: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Serve the version's blank image through our API (which sends CORS headers)
+    so the browser can draw it onto a canvas and read it back. Fetching the S3
+    URL directly would taint the canvas — S3 buckets aren't CORS-configured."""
+    version = _owned_version(db, version_id, current.brand_id)
+    tpl = db.get(Template, version.template_id)
+    try:
+        img = render._load_blank(tpl.blank_image_url)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 
 class RatioSuggestRequest(BaseModel):
@@ -262,6 +288,50 @@ def create_ratio_variant(
         template_version_id=version.id,
         ratio=req.ratio,
         dimensions_json=req.target_dims,
+        layers_json={},
+        blank_image_url=url,
+        text_baked=True,
+        source="extended",
+        status="draft",
+    )
+    db.add(variant)
+    db.commit()
+    db.refresh(variant)
+    return variant
+
+
+@router.post(
+    "/versions/{version_id}/ratio-variants/from-composite",
+    response_model=RatioVariantOut,
+)
+def create_ratio_variant_from_composite(
+    version_id: str,
+    ratio: str = Form(...),
+    target_w: int = Form(...),
+    target_h: int = Form(...),
+    composite: UploadFile = File(...),
+    current: CurrentUser = Depends(require_editor),
+    db: Session = Depends(get_db),
+):
+    """Resize a CLIENT-rendered composite to a new ratio by extending the canvas.
+
+    The browser bakes the design (blank + wrapped text) into a bitmap that
+    matches the editor exactly and uploads it here; we only reshape it (no
+    stretch), so the result never diverges from what the user saw on the canvas.
+    """
+    version = _owned_version(db, version_id, current.brand_id)
+    data = composite.file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty composite upload")
+
+    target_dims = {"w": int(target_w), "h": int(target_h)}
+    extended = render.extend_canvas(data, target_dims)
+    url = _store_resized(extended, version.id, ratio)
+
+    variant = TemplateRatioVariant(
+        template_version_id=version.id,
+        ratio=ratio,
+        dimensions_json=target_dims,
         layers_json={},
         blank_image_url=url,
         text_baked=True,

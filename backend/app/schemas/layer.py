@@ -50,6 +50,11 @@ class LayerTranslationOut(BaseModel):
     line_height_override: float | None = None
     letter_spacing_override: float | None = None
     color_override: str | None = None
+    # Per-language position/size; NULL inherits the layer.
+    x_percent_override: float | None = None
+    y_percent_override: float | None = None
+    width_percent_override: float | None = None
+    height_percent_override: float | None = None
     status: str
     last_saved_at: datetime
 
@@ -82,6 +87,8 @@ class LayerTranslationUpsert(BaseModel):
     """Auto-save payload from the editor (debounced).
 
     Style fields are per-language overrides; NULL inherits the layer default.
+    Position/size are saved separately via the geometry endpoint, so they are
+    deliberately absent here and never touched by a text save.
     """
 
     content_delta: dict
@@ -94,3 +101,14 @@ class LayerTranslationUpsert(BaseModel):
     letter_spacing_override: float | None = None
     color_override: str | None = None
     status: str | None = None
+
+
+class TranslationGeometryUpdate(BaseModel):
+    """Partial update of a translation's per-language position/size (from drag /
+    resize on the canvas). Only the fields sent are changed, so it never clobbers
+    text or style. NULL is a meaningful value here — it resets to the layer."""
+
+    x_percent_override: float | None = None
+    y_percent_override: float | None = None
+    width_percent_override: float | None = None
+    height_percent_override: float | None = None

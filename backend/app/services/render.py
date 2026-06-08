@@ -91,20 +91,26 @@ def render_template(
         key = layer["layer_key"]
         pos = (positions or {}).get(key)
 
+        translations = layer.get("translations", [])
         t = next(
-            (
-                tr
-                for tr in layer.get("translations", [])
-                if tr["language_code"] == language_code
-            ),
+            (tr for tr in translations if tr["language_code"] == language_code),
             None,
         )
+        # The requested language may have no copy yet — fall back to any
+        # translation that actually has text so the render isn't blank.
+        if t is None or not delta_to_plain_text(t.get("content_delta")):
+            t = next(
+                (tr for tr in translations if delta_to_plain_text(tr.get("content_delta"))),
+                t,
+            )
         delta = t["content_delta"] if t else None
         if not delta_to_plain_text(delta):
             continue
 
-        x_pct = pos["x"] if pos else layer["x_percent"]
-        y_pct = pos["y"] if pos else layer["y_percent"]
+        # Ratio-variant position wins; otherwise use the language's own override,
+        # falling back to the layer's base coordinate.
+        x_pct = pos["x"] if pos else _resolve(layer, t, "x_percent", "x_percent_override", 0)
+        y_pct = pos["y"] if pos else _resolve(layer, t, "y_percent", "y_percent_override", 0)
         size = int(
             (pos and pos.get("font"))
             or _resolve(layer, t, "base_font_size", "font_size_override", 32)

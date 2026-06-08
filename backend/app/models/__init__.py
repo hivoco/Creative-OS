@@ -4,7 +4,7 @@ from app.models.template import Template, TemplateVersion
 from app.models.layer import TextLayer, LayerTranslation
 from app.models.ratio import TemplateRatioVariant
 from app.models.review import ReviewRequest, FeedbackComment
-from app.models.video import BrandVoice, VideoJob
+from app.models.video import BrandVoice, VideoJob, VideoReviewRequest, VideoComment
 
 __all__ = [
     "SuperAdmin",
@@ -19,4 +19,6 @@ __all__ = [
     "FeedbackComment",
     "BrandVoice",
     "VideoJob",
+    "VideoReviewRequest",
+    "VideoComment",
 ]

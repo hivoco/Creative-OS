@@ -246,7 +246,7 @@ python download_fonts.py    # Noto fonts for multilingual export
 python seed.py              # tables + demo brand/users
 uvicorn app.main:app --reload --port 8000
 ```
-**Frontend** (port 6101): `cd frontend && npm install && npm run dev`
+**Frontend** (port 6001): `cd frontend && npm install && npm run dev`
 (`VITE_API_BASE_URL=http://localhost:8000`).
 
 ---

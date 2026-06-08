@@ -13,7 +13,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
-from app.core.deps import CurrentUser, require_editor
+from app.core.deps import CurrentUser, get_current_user, require_editor
 from app.core.ist import ist_date_str
 from app.models import Brand, BrandVoice, VideoJob
 from app.schemas.video import VideoJobOut, VoiceOut
@@ -83,26 +83,55 @@ async def clone_voice(
 
 @router.get("/jobs", response_model=list[VideoJobOut])
 def list_jobs(
-    current: CurrentUser = Depends(require_editor), db: Session = Depends(get_db)
+    current: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    return (
-        db.query(VideoJob)
-        .filter(VideoJob.brand_id == current.brand_id)
-        .order_by(VideoJob.created_at.desc())
-        .all()
-    )
+    q = db.query(VideoJob).filter(VideoJob.brand_id == current.brand_id)
+    # Managers only see the review queue — videos submitted for review.
+    if current.role == "manager":
+        q = q.filter(VideoJob.review_status == "in_review")
+    return q.order_by(VideoJob.created_at.desc()).all()
 
 
 @router.get("/jobs/{job_id}", response_model=VideoJobOut)
 def get_job(
     job_id: str,
-    current: CurrentUser = Depends(require_editor),
+    current: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     job = db.get(VideoJob, job_id)
     if not job or job.brand_id != current.brand_id:
         raise HTTPException(status_code=404, detail="Job not found")
+    # Managers can only reach videos that are in review.
+    if current.role == "manager" and job.review_status != "in_review":
+        raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.get("/jobs/{job_id}/download")
+def download_job_video(
+    job_id: str,
+    current: CurrentUser = Depends(require_editor),
+    db: Session = Depends(get_db),
+):
+    """Return a short-lived presigned URL that downloads the finished MP4.
+
+    The frontend points an anchor at this URL; S3 serves it with an
+    ``attachment`` disposition so the browser saves the file rather than
+    navigating to it.
+    """
+    job = db.get(VideoJob, job_id)
+    if not job or job.brand_id != current.brand_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.video_url:
+        raise HTTPException(status_code=409, detail="Video is not ready yet")
+    if job.review_status != "approved":
+        raise HTTPException(
+            status_code=409, detail="Video must be approved before download"
+        )
+
+    slug = "".join(c if c.isalnum() else "-" for c in (job.title or "video")).strip("-")
+    filename = f"{(slug or 'video')[:60]}.mp4"
+    return {"url": s3.presigned_download_url(job.video_url, filename)}
 
 
 @router.delete("/jobs/{job_id}", status_code=204)
@@ -193,8 +222,18 @@ def _process_job(job_id: str, brand_slug: str, date: str) -> None:
         job.audio_status = "processing"
         db.commit()
 
+        # Capture the fields the worker threads need BEFORE spawning them.
+        # db.commit() expires the ORM attributes (expire_on_commit), so touching
+        # job.* inside the threads would trigger two concurrent lazy reloads on
+        # the same session/connection — SQLAlchemy's "concurrent operations are
+        # not permitted" error. Reading into plain locals keeps threads off the
+        # session entirely.
+        photo_url = job.photo_url
+        script_text = job.script_text
+        voice_id = job.voice_id
+
         def run_image() -> str:
-            data = segmind_video.generate_portrait(job.photo_url)
+            data = segmind_video.generate_portrait(photo_url)
             return s3.upload_bytes(
                 data=data,
                 key=_asset_key(brand_slug, date, job_id, "portrait.png"),
@@ -202,7 +241,7 @@ def _process_job(job_id: str, brand_slug: str, date: str) -> None:
             )
 
         def run_audio() -> str:
-            data = fish.generate_audio(text=job.script_text, voice_id=job.voice_id)
+            data = fish.generate_audio(text=script_text, voice_id=voice_id)
             return s3.upload_bytes(
                 data=data,
                 key=_asset_key(brand_slug, date, job_id, "audio.mp3"),

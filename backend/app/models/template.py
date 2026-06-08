@@ -38,6 +38,10 @@ class TemplateVersion(PkMixin, TimestampMixin, Base):
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     # draft | in_review | approved | rejected
     status: Mapped[str] = mapped_column(String(16), default="draft")
+    # The language the canvas was first authored in. Set once, on the first
+    # content-bearing save, and never changes — every translation is made FROM
+    # this language (original → X, never a translation of a translation).
+    source_language: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     template: Mapped["Template"] = relationship(back_populates="versions")
     layers: Mapped[list["TextLayer"]] = relationship(  # noqa: F821

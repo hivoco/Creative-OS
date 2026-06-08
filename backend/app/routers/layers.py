@@ -10,6 +10,7 @@ from app.schemas.layer import (
     TextLayerCreate,
     TextLayerOut,
     TextLayerUpdate,
+    TranslationGeometryUpdate,
 )
 from app.schemas.template import TemplateOut, TemplateVersionOut
 from app.services.render import delta_to_plain_text
@@ -162,6 +163,10 @@ def upsert_translation(
         .first()
     )
     plain = payload.plain_text or delta_to_plain_text(payload.content_delta)
+    # The first language to receive real content becomes the version's permanent
+    # original — every later translation is made from it.
+    if layer.version.source_language is None and plain.strip():
+        layer.version.source_language = language_code
     overrides = dict(
         font_family_override=payload.font_family_override,
         font_weight_override=payload.font_weight_override,
@@ -188,6 +193,51 @@ def upsert_translation(
             setattr(row, field, value)
         if payload.status:
             row.status = payload.status
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.patch(
+    "/layers/{layer_id}/translations/{language_code}/geometry",
+    response_model=LayerTranslationOut,
+)
+def update_translation_geometry(
+    layer_id: str,
+    language_code: str,
+    payload: TranslationGeometryUpdate,
+    current: CurrentUser = Depends(require_editor),
+    db: Session = Depends(get_db),
+):
+    """Save a single language's position/size from a drag/resize on the canvas.
+
+    Partial: only the geometry fields sent are written, so text and style on the
+    same row are left untouched. Creates an (empty) row if the language has none
+    yet, so a layer can be positioned per-language before it is translated.
+    """
+    layer = _owned_layer(db, layer_id, current.brand_id)
+    _assert_editable(layer.version)
+
+    row = (
+        db.query(LayerTranslation)
+        .filter(
+            LayerTranslation.layer_id == layer.id,
+            LayerTranslation.language_code == language_code,
+        )
+        .first()
+    )
+    if row is None:
+        row = LayerTranslation(
+            layer_id=layer.id,
+            language_code=language_code,
+            content_delta={"ops": []},
+            plain_text="",
+            status="draft",
+        )
+        db.add(row)
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
     db.commit()
     db.refresh(row)
     return row

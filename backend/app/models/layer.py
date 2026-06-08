@@ -57,6 +57,13 @@ class LayerTranslation(PkMixin, Base):
     line_height_override: Mapped[float | None] = mapped_column(Float, nullable=True)
     letter_spacing_override: Mapped[float | None] = mapped_column(Float, nullable=True)
     color_override: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Per-language position/size overrides (same NULL = inherit the layer). Lets
+    # each language sit/size independently, since translated copy has different
+    # length and script metrics.
+    x_percent_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+    y_percent_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+    width_percent_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+    height_percent_override: Mapped[float | None] = mapped_column(Float, nullable=True)
     # draft | translated | in_review | approved
     status: Mapped[str] = mapped_column(String(16), default="draft")
     last_saved_at: Mapped[datetime] = mapped_column(

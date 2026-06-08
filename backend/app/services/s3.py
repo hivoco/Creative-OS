@@ -3,6 +3,7 @@ the AI-resized output. Mirrors the uploader from the previous (iifl) backend.
 """
 
 from functools import lru_cache
+from urllib.parse import unquote, urlparse
 
 import boto3
 
@@ -40,4 +41,24 @@ def upload_bytes(*, data: bytes, key: str, content_type: str) -> str:
     )
     return (
         f"https://{settings.aws_bucket_name}.s3.{settings.aws_region}.amazonaws.com/{s3_key}"
+    )
+
+
+def presigned_download_url(public_url: str, filename: str, expires_in: int = 600) -> str:
+    """Presign a GET for an object we previously uploaded, forcing the browser to
+    download it (instead of playing it inline) via Content-Disposition.
+
+    A plain ``<a download>`` is ignored for cross-origin S3 URLs, so the only
+    reliable way to download is a presigned link that carries an
+    ``attachment`` disposition in the response headers.
+    """
+    key = unquote(urlparse(public_url).path).lstrip("/")
+    return _client().generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": settings.aws_bucket_name,
+            "Key": key,
+            "ResponseContentDisposition": f'attachment; filename="{filename}"',
+        },
+        ExpiresIn=expires_in,
     )

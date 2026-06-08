@@ -156,6 +156,8 @@ def create_version(
         created_by=current.id,
         version_number=next_number,
         status="draft",
+        # Carry the original language forward so the clone translates from it too.
+        source_language=latest.source_language if latest else None,
     )
     db.add(version)
     db.flush()
@@ -197,6 +199,10 @@ def create_version(
                         line_height_override=tr.line_height_override,
                         letter_spacing_override=tr.letter_spacing_override,
                         color_override=tr.color_override,
+                        x_percent_override=tr.x_percent_override,
+                        y_percent_override=tr.y_percent_override,
+                        width_percent_override=tr.width_percent_override,
+                        height_percent_override=tr.height_percent_override,
                         status="draft",
                     )
                 )

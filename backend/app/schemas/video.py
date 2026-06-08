@@ -18,6 +18,7 @@ class VideoJobOut(BaseModel):
     title: str
     status: str
     current_stage: str
+    review_status: str
     voice_id: str
     voice_name: str | None = None
     script_text: str
