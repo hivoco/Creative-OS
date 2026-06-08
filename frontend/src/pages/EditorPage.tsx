@@ -143,6 +143,10 @@ export function EditorPage() {
           line_height_override: null,
           letter_spacing_override: null,
           color_override: null,
+          x_percent_override: null,
+          y_percent_override: null,
+          width_percent_override: null,
+          height_percent_override: null,
           status: 'draft',
           last_saved_at: '',
         }
