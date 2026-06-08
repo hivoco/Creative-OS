@@ -20,7 +20,7 @@ as-built spec.
 cd frontend
 npm install
 cp .env.example .env     # VITE_API_BASE_URL=http://localhost:8000
-npm run dev              # http://localhost:6101
+npm run dev              # http://localhost:6001
 ```
 
 Make sure the backend is running on port 8000 (or update `VITE_API_BASE_URL`).
@@ -29,7 +29,7 @@ Make sure the backend is running on port 8000 (or update `VITE_API_BASE_URL`).
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Vite dev server (port 6101) |
+| `npm run dev` | Vite dev server (port 6001) |
 | `npm run build` | `tsc -b` + production build |
 | `npm run lint` | ESLint (incl. a `max-lines: 300` rule to keep files split) |
 | `npm run preview` | Preview the production build |
