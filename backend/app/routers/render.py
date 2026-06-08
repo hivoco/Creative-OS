@@ -61,6 +61,37 @@ def _smart_resize_blank(blank_url: str, ratio: str) -> str | None:
         return None
 
 
+def _ai_reshape(data: bytes, ratio: str, target_dims: dict) -> tuple[bytes, str, str]:
+    """Reshape a finished composite to a new aspect ratio.
+
+    Preferred: Segmind nano-banana-pro generative RECOMPOSE — re-lays-out the
+    existing elements (subject, text, logo, CTA) to fill the new frame, instead
+    of trapping the original in a padded band, while keeping each element's
+    identity intact. Output is 2K PNG: 2K keeps the invented pixels sharp enough
+    while staying fast/cheap to generate (Segmind silently downgrades anything
+    but an uppercase "K", so "2K" not "2k"), PNG so hard-edged graphics, logos
+    and text don't pick up JPEG ringing. Falls back to the Pillow blurred-extend
+    (JPEG) when Segmind/S3 aren't available or the call fails, so a resize always
+    produces *something*. Returns (image_bytes, source_tag, fmt)."""
+    if segmind.is_live() and s3.s3_enabled():
+        try:
+            input_url = s3.upload_bytes(
+                data=data,
+                key=f"composites/{new_uuid()}.png",
+                content_type="image/png",
+            )
+            out = segmind.recompose_composite(
+                image_url=input_url,
+                aspect_ratio=ratio,
+                output_resolution="2K",
+                output_format="png",
+            )
+            return out, "ai_resized", "png"
+        except Exception as e:  # noqa: BLE001 — best-effort; fall back to blur
+            logger.warning("AI reshape failed for ratio %s, using blur: %s", ratio, e)
+    return render.extend_canvas(data, target_dims), "extended", "jpeg"
+
+
 def _layers_payload(db: Session, version_id: str) -> list[dict]:
     layers = (
         db.query(TextLayer)
@@ -281,8 +312,8 @@ def create_ratio_variant(
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    extended = render.extend_canvas(composite, req.target_dims)
-    url = _store_resized(extended, version.id, req.ratio)
+    reshaped, source, fmt = _ai_reshape(composite, req.ratio, req.target_dims)
+    url = _store_resized(reshaped, version.id, req.ratio, fmt)
 
     variant = TemplateRatioVariant(
         template_version_id=version.id,
@@ -291,7 +322,7 @@ def create_ratio_variant(
         layers_json={},
         blank_image_url=url,
         text_baked=True,
-        source="extended",
+        source=source,
         status="draft",
     )
     db.add(variant)
@@ -325,8 +356,8 @@ def create_ratio_variant_from_composite(
         raise HTTPException(status_code=400, detail="Empty composite upload")
 
     target_dims = {"w": int(target_w), "h": int(target_h)}
-    extended = render.extend_canvas(data, target_dims)
-    url = _store_resized(extended, version.id, ratio)
+    reshaped, source, fmt = _ai_reshape(data, ratio, target_dims)
+    url = _store_resized(reshaped, version.id, ratio, fmt)
 
     variant = TemplateRatioVariant(
         template_version_id=version.id,
@@ -335,7 +366,7 @@ def create_ratio_variant_from_composite(
         layers_json={},
         blank_image_url=url,
         text_baked=True,
-        source="extended",
+        source=source,
         status="draft",
     )
     db.add(variant)
@@ -344,11 +375,13 @@ def create_ratio_variant_from_composite(
     return variant
 
 
-def _store_resized(data: bytes, version_id: str, ratio: str) -> str:
+def _store_resized(data: bytes, version_id: str, ratio: str, fmt: str = "jpeg") -> str:
     safe = ratio.replace(":", "x")
-    key = f"ratios/{version_id}/{safe}-{new_uuid()}.jpg"
+    ext = "png" if fmt == "png" else "jpg"
+    content_type = "image/png" if fmt == "png" else "image/jpeg"
+    key = f"ratios/{version_id}/{safe}-{new_uuid()}.{ext}"
     if s3.s3_enabled():
-        return s3.upload_bytes(data=data, key=key, content_type="image/jpeg")
+        return s3.upload_bytes(data=data, key=key, content_type=content_type)
     from app.services import storage
 
     return storage.save_bytes(data=data, key=key)
