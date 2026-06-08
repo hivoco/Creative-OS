@@ -306,10 +306,17 @@ async function ensureFontsLoaded(
 function canvasToBlob(canvas: HTMLCanvasElement, mime: string): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) =>
-        blob
-          ? resolve(blob)
-          : reject(new Error('Could not export the canvas (image blocked by CORS?)')),
+      (blob) => {
+        if (!blob) {
+          reject(new Error('Could not export the canvas (image blocked by CORS?)'))
+        } else if (blob.size === 0) {
+          // A 0-byte blob means we'd upload an empty composite — fail loudly
+          // instead of silently sending nothing to the resize endpoint.
+          reject(new Error('Rendered an empty image — the design may not have loaded yet'))
+        } else {
+          resolve(blob)
+        }
+      },
       mime,
       mime === 'image/jpeg' ? 0.92 : undefined,
     )

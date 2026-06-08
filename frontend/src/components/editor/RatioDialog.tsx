@@ -164,7 +164,7 @@ export function RatioDialog({
                 <h3 className="text-sm font-semibold">Aspect ratio</h3>
               </div>
               <span className="text-[11px] text-muted-foreground">
-                Text stays put · no stretching
+                AI reframes · no stretching
               </span>
             </div>
 
@@ -219,8 +219,10 @@ export function RatioDialog({
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Resize to {newRatio}?</p>
                   <p className="text-xs text-muted-foreground">
-                    Adapts the {langLabel(language)} design below to {newRatio}. Text
-                    stays put — the canvas is extended, not stretched.
+                    Sends the {langLabel(language)} design below to AI, which
+                    re-composes it to fill {newRatio} — your subject, text and
+                    logo are rearranged to fit the new frame, nothing is
+                    stretched or blurred.
                   </p>
                 </div>
                 <div className="flex min-h-32 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
