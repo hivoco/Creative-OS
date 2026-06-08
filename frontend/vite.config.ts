@@ -13,9 +13,11 @@ export default defineConfig({
   server: {
     port: 6001,
     strictPort: true,
+    allowedHosts: ['workspaceai.thefirstimpression.ai'],
   },
   preview: {
     port: 6001,
     strictPort: true,
+    allowedHosts: ['workspaceai.thefirstimpression.ai'],
   },
 })
