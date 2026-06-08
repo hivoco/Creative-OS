@@ -1,5 +1,10 @@
 import { api } from '@/lib/api'
-import type { BrandVoice, VideoJob } from '@/types'
+import type {
+  BrandVoice,
+  VideoComment,
+  VideoJob,
+  VideoReviewRequest,
+} from '@/types'
 
 export async function listVoices(): Promise<BrandVoice[]> {
   const { data } = await api.get<BrandVoice[]>('/video/voices')
@@ -59,6 +64,68 @@ export async function downloadVideoJob(id: string): Promise<void> {
   document.body.appendChild(a)
   a.click()
   a.remove()
+}
+
+// ---- Review workflow ------------------------------------------------------
+
+export async function getVideoReview(
+  jobId: string,
+): Promise<VideoReviewRequest | null> {
+  const { data } = await api.get<VideoReviewRequest | null>(
+    `/video/jobs/${jobId}/review`,
+  )
+  return data
+}
+
+export async function submitVideoForReview(
+  jobId: string,
+  reviewerId?: string,
+): Promise<VideoReviewRequest> {
+  const { data } = await api.post<VideoReviewRequest>(
+    `/video/jobs/${jobId}/submit`,
+    { reviewer_id: reviewerId ?? null },
+  )
+  return data
+}
+
+export async function approveVideo(jobId: string): Promise<VideoReviewRequest> {
+  const { data } = await api.post<VideoReviewRequest>(`/video/jobs/${jobId}/approve`)
+  return data
+}
+
+export async function rejectVideo(
+  jobId: string,
+  comment: string,
+): Promise<VideoReviewRequest> {
+  const { data } = await api.post<VideoReviewRequest>(`/video/jobs/${jobId}/reject`, {
+    comment,
+  })
+  return data
+}
+
+export async function listVideoComments(jobId: string): Promise<VideoComment[]> {
+  const { data } = await api.get<VideoComment[]>(`/video/jobs/${jobId}/comments`)
+  return data
+}
+
+export async function addVideoComment(
+  jobId: string,
+  comment: string,
+): Promise<VideoComment> {
+  const { data } = await api.post<VideoComment>(`/video/jobs/${jobId}/comments`, {
+    comment,
+  })
+  return data
+}
+
+export async function resolveVideoComment(
+  commentId: string,
+  resolved: 'open' | 'resolved',
+): Promise<VideoComment> {
+  const { data } = await api.patch<VideoComment>(`/video/comments/${commentId}`, {
+    resolved,
+  })
+  return data
 }
 
 /** Format a UTC ISO timestamp as IST date-time. */

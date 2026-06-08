@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
-import { Check, CloudOff, Loader2, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, CloudOff, Loader2, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { ConfirmPopover } from '@/components/ui/confirm-popover'
 import { ColorInput, FieldInput, FieldLabel } from '@/components/ui/Field'
 import { QuillEditor } from '@/components/editor/QuillEditor'
 import {
@@ -16,7 +16,7 @@ import {
   type TranslationPayload,
 } from '@/components/editor/useAutoSave'
 import { deltaToPlainText } from '@/lib/delta'
-import type { Delta, LayerTranslation, TextLayer } from '@/types'
+import type { Delta, TextLayer } from '@/types'
 
 interface Props {
   versionId: string
@@ -27,19 +27,30 @@ interface Props {
   onPatchLayer: (id: string, patch: Partial<TextLayer>) => void
   onDelete: (id: string) => void
   onLivePreview: (layerId: string, language: string, t: Partial<TranslationPayload>) => void
-  onTranslationSaved: () => void
 }
 
+/** The per-language override fields shared by a saved translation and a draft. */
+type StyleOverrides = Pick<
+  TranslationPayload,
+  | 'font_family_override'
+  | 'font_weight_override'
+  | 'italic_override'
+  | 'font_size_override'
+  | 'line_height_override'
+  | 'letter_spacing_override'
+  | 'color_override'
+>
+
 /** Resolve the effective per-language style: override ?? layer default. */
-function styleFromTranslation(layer: TextLayer, t?: LayerTranslation): LayerStyle {
+function styleFromOverrides(layer: TextLayer, o?: StyleOverrides | null): LayerStyle {
   return {
-    font_family: t?.font_family_override ?? layer.font_family,
-    font_weight: t?.font_weight_override ?? layer.font_weight,
-    italic: t?.italic_override ?? layer.italic,
-    font_size: t?.font_size_override ?? layer.base_font_size,
-    line_height: t?.line_height_override ?? layer.line_height,
-    letter_spacing_pct: t?.letter_spacing_override ?? layer.letter_spacing_pct,
-    color: t?.color_override ?? layer.default_color,
+    font_family: o?.font_family_override ?? layer.font_family,
+    font_weight: o?.font_weight_override ?? layer.font_weight,
+    italic: o?.italic_override ?? layer.italic,
+    font_size: o?.font_size_override ?? layer.base_font_size,
+    line_height: o?.line_height_override ?? layer.line_height,
+    letter_spacing_pct: o?.letter_spacing_override ?? layer.letter_spacing_pct,
+    color: o?.color_override ?? layer.default_color,
   }
 }
 
@@ -66,7 +77,6 @@ export function LayerInspector({
   onPatchLayer,
   onDelete,
   onLivePreview,
-  onTranslationSaved,
 }: Props) {
   // Keyed on `${layer.id}-${language}` by the parent, so lazy initializers run
   // fresh on every layer/language switch — clicking a layer fills the form.
@@ -87,21 +97,22 @@ export function LayerInspector({
     [serverTranslation, layer.translations, sourceLanguage],
   )
 
-  const [delta, setDelta] = useState<Delta>(() => seed?.content_delta ?? { ops: [] })
-  const [style, setStyle] = useState<LayerStyle>(() =>
-    styleFromTranslation(layer, seed),
+  // A local draft survives only when edits never reached the DB (it's cleared
+  // on every successful save), so its mere presence means genuinely-unsaved
+  // work — seed straight from it, no prompt. Managers can't edit, so skip them.
+  const localDraft = useMemo(
+    () => (editable ? readLocalDraft(versionId, layer.id, language) : null),
+    [editable, versionId, layer.id, language],
   )
 
-  const [restore, setRestore] = useState<TranslationPayload | null>(() => {
-    const local = readLocalDraft(versionId, layer.id, language)
-    if (!local) return null
-    const serverTime = serverTranslation
-      ? new Date(serverTranslation.last_saved_at).getTime()
-      : 0
-    return local.savedAt > serverTime + 1000 ? local.payload : null
-  })
+  const [delta, setDelta] = useState<Delta>(
+    () => localDraft?.payload.content_delta ?? seed?.content_delta ?? { ops: [] },
+  )
+  const [style, setStyle] = useState<LayerStyle>(() =>
+    styleFromOverrides(layer, localDraft?.payload ?? seed),
+  )
 
-  const { state, scheduleSave, flush, clearLocalDraft } = useAutoSave({
+  const { state, scheduleSave } = useAutoSave({
     versionId,
     layerId: layer.id,
     languageCode: language,
@@ -124,27 +135,6 @@ export function LayerInspector({
     persist(delta, deltaToPlainText(delta), next)
   }
 
-  async function applyRestore() {
-    if (!restore) return
-    setDelta(restore.content_delta)
-    const nextStyle: LayerStyle = {
-      font_family: restore.font_family_override ?? layer.font_family,
-      font_weight: restore.font_weight_override ?? layer.font_weight,
-      italic: restore.italic_override ?? layer.italic,
-      font_size: restore.font_size_override ?? layer.base_font_size,
-      line_height: restore.line_height_override ?? layer.line_height,
-      letter_spacing_pct: restore.letter_spacing_override ?? layer.letter_spacing_pct,
-      color: restore.color_override ?? layer.default_color,
-    }
-    setStyle(nextStyle)
-    await flush(restore)
-    clearLocalDraft()
-    setRestore(null)
-    onLivePreview(layer.id, language, restore)
-    onTranslationSaved()
-    toast.success('Draft restored')
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -153,40 +143,23 @@ export function LayerInspector({
           <SaveBadge state={state} />
         </div>
         {editable && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive"
-            onClick={() => onDelete(layer.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <ConfirmPopover
+            trigger={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                aria-label={`Delete ${layer.layer_key} layer`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            }
+            title={`Delete “${layer.layer_key}” layer?`}
+            description="Removes this layer and its text in every language. You can undo with ⌘/Ctrl+Z."
+            onConfirm={() => onDelete(layer.id)}
+          />
         )}
       </div>
-
-      {restore && (
-        <div className="rounded-md border border-foreground/30 bg-accent/60 p-3 text-sm">
-          <p className="mb-1 font-medium">You have unsaved changes — restore?</p>
-          <p className="mb-2 text-xs text-muted-foreground">
-            “{deltaToPlainText(restore.content_delta).slice(0, 60)}”
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={applyRestore}>
-              <RotateCcw className="mr-1 h-3 w-3" /> Restore
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                clearLocalDraft()
-                setRestore(null)
-              }}
-            >
-              Discard
-            </Button>
-          </div>
-        </div>
-      )}
 
       <div className="space-y-2">
         <FieldLabel>Text · {language}</FieldLabel>

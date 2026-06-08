@@ -39,14 +39,12 @@ interface Props {
 
 type Dir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
+// Only width is user-controllable: height is driven by the text content (the
+// box grows to wrap), matching exactly how the layer is rendered to the final
+// bitmap. So we expose the left/right handles only — dragging them changes the
+// wrap width; the height follows the text.
 const HANDLES: { dir: Dir; pos: string; cursor: string }[] = [
-  { dir: 'nw', pos: 'left-0 top-0', cursor: 'nwse-resize' },
-  { dir: 'n', pos: 'left-1/2 top-0 -translate-x-1/2', cursor: 'ns-resize' },
-  { dir: 'ne', pos: 'right-0 top-0', cursor: 'nesw-resize' },
   { dir: 'e', pos: 'right-0 top-1/2 -translate-y-1/2', cursor: 'ew-resize' },
-  { dir: 'se', pos: 'right-0 bottom-0', cursor: 'nwse-resize' },
-  { dir: 's', pos: 'left-1/2 bottom-0 -translate-x-1/2', cursor: 'ns-resize' },
-  { dir: 'sw', pos: 'left-0 bottom-0', cursor: 'nesw-resize' },
   { dir: 'w', pos: 'left-0 top-1/2 -translate-y-1/2', cursor: 'ew-resize' },
 ]
 
@@ -137,18 +135,31 @@ export function TemplateCanvas({
     }
   }
 
+  // Effective position/size for the shown language: the translation's override
+  // if set, else the layer's base. Drag/resize edits these per language.
+  function geomFor(layer: TextLayer) {
+    const t = translationFor(layer)
+    return {
+      x: t?.x_percent_override ?? layer.x_percent,
+      y: t?.y_percent_override ?? layer.y_percent,
+      width: t?.width_percent_override ?? layer.width_percent,
+      height: t?.height_percent_override ?? layer.height_percent,
+    }
+  }
+
   function startMove(e: React.PointerEvent, layer: TextLayer) {
     e.preventDefault()
     e.stopPropagation() // don't let the frame's deselect handler fire
     onSelect(layer.id)
     if (readOnly) return // view-only: select to show a border, but never drag
     moved.current = false
+    const g = geomFor(layer)
     drag.current = {
       id: layer.id,
       startX: e.clientX,
       startY: e.clientY,
-      origX: layer.x_percent,
-      origY: layer.y_percent,
+      origX: g.x,
+      origY: g.y,
     }
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }
@@ -158,16 +169,17 @@ export function TemplateCanvas({
     e.stopPropagation()
     onSelect(layer.id)
     moved.current = false
+    const g = geomFor(layer)
     resize.current = {
       id: layer.id,
       dir,
       startX: e.clientX,
       startY: e.clientY,
       box: {
-        x_percent: layer.x_percent,
-        y_percent: layer.y_percent,
-        width_percent: layer.width_percent,
-        height_percent: layer.height_percent,
+        x_percent: g.x,
+        y_percent: g.y,
+        width_percent: g.width,
+        height_percent: g.height,
       },
     }
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
@@ -259,6 +271,7 @@ export function TemplateCanvas({
       {layers.map((layer) => {
         const selected = layer.id === selectedLayerId
         const s = styleFor(layer)
+        const g = geomFor(layer)
         const showHandles = selected && !!onResize
         return (
           <div
@@ -268,17 +281,19 @@ export function TemplateCanvas({
               'absolute box-border touch-none select-none whitespace-pre-wrap wrap-break-word px-1',
               readOnly ? 'cursor-pointer' : 'cursor-move',
               selected
-                ? 'outline-2 outline-offset-1 outline-foreground'
+                ? 'outline-2 outline-dashed outline-offset-2 outline-sky-400/80'
                 : // Managers see a clean image — only the clicked layer gets a box.
                   readOnly
                   ? ''
                   : 'outline-1 outline-dotted outline-offset-1 outline-foreground/20',
             )}
             style={{
-              left: `${layer.x_percent}%`,
-              top: `${layer.y_percent}%`,
-              width: `${layer.width_percent}%`,
-              height: showHandles ? `${layer.height_percent}%` : undefined,
+              left: `${g.x}%`,
+              top: `${g.y}%`,
+              width: `${g.width}%`,
+              // No fixed height — the box hugs the text (it grows as the copy
+              // wraps), so the editor outline matches the rendered output.
+              height: undefined,
               color: s.color,
               fontSize: `${s.fontSizeCqh}cqh`,
               fontFamily: `"${s.fontFamily}", system-ui, sans-serif`,
@@ -314,7 +329,7 @@ export function TemplateCanvas({
                   key={hnd.dir}
                   onPointerDown={(e) => startResize(e, layer, hnd.dir)}
                   className={cn(
-                    'absolute z-10 size-2.5 rounded-[2px] border border-foreground/30 bg-background',
+                    'absolute z-10 size-2.5 rounded-full border border-sky-400 bg-background shadow-sm',
                     hnd.pos,
                   )}
                   style={{ cursor: hnd.cursor }}

@@ -1,14 +1,24 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Clapperboard, Download, Loader2, Play, TriangleAlert, Trash2 } from 'lucide-react'
+import {
+  Download,
+  Loader2,
+  Lock,
+  MessageSquare,
+  Play,
+  Send,
+  TriangleAlert,
+  Trash2,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ConfirmPopover } from '@/components/ui/confirm-popover'
+import { VideoReviewPanel } from '@/components/video/VideoReviewPanel'
 import { VideoStages } from '@/components/video/VideoStages'
-import { downloadVideoJob, istDateTime } from '@/lib/videoServices'
+import { downloadVideoJob } from '@/lib/videoServices'
 import { cn } from '@/lib/utils'
-import type { VideoJob } from '@/types'
+import type { VideoJob, VideoReviewStatus } from '@/types'
 
 const STATUS_CHIP: Record<VideoJob['status'], { label: string; tone: string; dot: string }> = {
   completed: { label: 'Ready', tone: 'text-lime-400', dot: 'bg-lime-400' },
@@ -17,19 +27,36 @@ const STATUS_CHIP: Record<VideoJob['status'], { label: string; tone: string; dot
   failed: { label: 'Failed', tone: 'text-red-400', dot: 'bg-red-400' },
 }
 
+const REVIEW_CHIP: Record<VideoReviewStatus, { label: string; cls: string }> = {
+  draft: { label: 'Draft', cls: 'bg-secondary text-secondary-foreground' },
+  in_review: { label: 'In review', cls: 'bg-amber-100 text-amber-900' },
+  approved: { label: 'Approved', cls: 'bg-lime-100 text-lime-900' },
+  rejected: { label: 'Changes requested', cls: 'bg-destructive/15 text-destructive' },
+}
+
 export function VideoJobCard({
   job,
   onDelete,
+  onSubmitReview,
+  submitting = false,
 }: {
   job: VideoJob
   onDelete: (id: string) => void
+  onSubmitReview?: (id: string) => void
+  submitting?: boolean
 }) {
   const [playing, setPlaying] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
   const chip = STATUS_CHIP[job.status]
+  const reviewChip = REVIEW_CHIP[job.review_status]
   const still = job.image_url ?? job.photo_url ?? undefined
   const done = job.status === 'completed' && !!job.video_url
   const inFlight = job.status === 'processing' || job.status === 'pending'
+  const approved = job.review_status === 'approved'
+  const canSubmit =
+    done && (job.review_status === 'draft' || job.review_status === 'rejected')
+  const hasReview = job.review_status !== 'draft'
 
   async function handleDownload() {
     setDownloading(true)
@@ -95,7 +122,7 @@ export function VideoJobCard({
 
             {/* Completed → tap the play button to load + play */}
             {done && (
-              <div className="absolute inset-x-0 top-[30%] z-10 flex justify-center">
+              <div className="absolute inset-0 z-10 flex items-center justify-center">
                 <button
                   type="button"
                   onClick={() => setPlaying(true)}
@@ -109,75 +136,126 @@ export function VideoJobCard({
 
             {/* In progress → quiet spinner above the panel */}
             {inFlight && (
-              <div className="absolute inset-x-0 top-[28%] z-10 flex justify-center text-foreground/70">
+              <div className="absolute inset-x-0 top-[26%] z-10 flex justify-center text-foreground/70">
                 <Loader2 className="size-7 animate-spin" />
               </div>
             )}
 
             {/* Failed → alert above the panel */}
             {job.status === 'failed' && (
-              <div className="absolute inset-x-0 top-[26%] z-10 flex justify-center text-destructive">
+              <div className="absolute inset-x-0 top-[24%] z-10 flex justify-center text-destructive">
                 <TriangleAlert className="size-7" />
               </div>
             )}
 
-            {/* Floating info panel — inset & fully rounded, like the template cards */}
-            <div className="absolute inset-x-3 bottom-3 z-20 space-y-2 rounded-2xl bg-neutral-950/95 px-5 py-4 text-white shadow-lg backdrop-blur-sm">
+            {/* Compact caption — status + title only, so the thumbnail stays visible */}
+            <div className="absolute inset-x-0 bottom-0 z-20 space-y-0.5 bg-linear-to-t from-neutral-950/95 via-neutral-950/60 to-transparent px-3 pb-2 pt-6 text-white">
               <div className="flex items-center justify-between gap-3">
                 <span
                   className={cn(
-                    'flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em]',
+                    'flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em]',
                     chip.tone,
                   )}
                 >
-                  <span className={cn('h-2 w-2 rounded-full', chip.dot)} />
+                  <span className={cn('h-1.5 w-1.5 rounded-full', chip.dot)} />
                   {chip.label}
                 </span>
-                <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.2em] text-white/40">
+                <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
                   {job.resolution}
                 </span>
               </div>
 
-              <p className="truncate text-2xl font-extrabold leading-tight" title={job.title}>
+              <p className="truncate text-sm font-bold leading-tight" title={job.title}>
                 {job.title}
-              </p>
-              <p className="flex items-center gap-1 truncate text-[11px] text-white/40">
-                <Clapperboard className="h-3 w-3 shrink-0" />
-                {istDateTime(job.created_at)}
-                {job.voice_name ? ` · ${job.voice_name}` : ''}
               </p>
 
               {inFlight && (
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <VideoStages job={job} />
                 </div>
               )}
 
               {job.status === 'failed' && job.error && (
-                <p className="rounded-md border border-red-400/30 bg-red-400/10 p-2 text-xs text-red-300">
+                <p className="mt-1 rounded-md border border-red-400/30 bg-red-400/10 p-1.5 text-xs text-red-300">
                   {job.error}
                 </p>
-              )}
-
-              {done && (
-                <Button
-                  size="sm"
-                  className="mt-1 w-full border border-white/20 bg-white/10 text-white hover:bg-white/20"
-                  onClick={handleDownload}
-                  disabled={downloading}
-                >
-                  {downloading ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-1 h-4 w-4" />
-                  )}
-                  {downloading ? 'Preparing…' : 'Download MP4'}
-                </Button>
               )}
             </div>
           </>
         )}
       </div>
+
+      {/* Review footer — sits below the thumbnail so the image stays clear */}
+      {done && (
+        <div className="space-y-2 border-t border-border bg-background p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                reviewChip.cls,
+              )}
+            >
+              {reviewChip.label}
+            </span>
+            {hasReview && (
+              <button
+                type="button"
+                onClick={() => setShowFeedback((s) => !s)}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <MessageSquare className="h-3 w-3" />
+                {showFeedback ? 'Hide feedback' : 'View feedback'}
+              </button>
+            )}
+          </div>
+
+          {canSubmit && onSubmitReview && (
+            <Button
+              size="sm"
+              className="w-full"
+              onClick={() => onSubmitReview(job.id)}
+              disabled={submitting}
+            >
+              <Send className="mr-1 h-4 w-4" />
+              {job.review_status === 'rejected' ? 'Resubmit for review' : 'Submit for review'}
+            </Button>
+          )}
+
+          {approved && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={handleDownload}
+              disabled={downloading}
+            >
+              {downloading ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-1 h-4 w-4" />
+              )}
+              {downloading ? 'Preparing…' : 'Download MP4'}
+            </Button>
+          )}
+
+          {job.review_status === 'in_review' && (
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Lock className="h-3 w-3" /> Download unlocks after approval
+            </p>
+          )}
+
+          {showFeedback && hasReview && (
+            <div className="pt-1">
+              <VideoReviewPanel
+                jobId={job.id}
+                status={job.review_status}
+                role="editor"
+                onStatusChange={() => {}}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   )
 }

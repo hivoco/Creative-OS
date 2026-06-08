@@ -186,9 +186,14 @@ function drawLayer(
       `${style.letterSpacingPct * width}px`
   }
 
-  const boxLeft = (layer.x_percent / 100) * width
-  const boxTop = (layer.y_percent / 100) * height
-  const boxW = Math.max((layer.width_percent / 100) * width, 1)
+  // Position/size follow the shown language's per-translation override, falling
+  // back to the layer — exactly as the editor canvas resolves them.
+  const xPct = t?.x_percent_override ?? layer.x_percent
+  const yPct = t?.y_percent_override ?? layer.y_percent
+  const wPct = t?.width_percent_override ?? layer.width_percent
+  const boxLeft = (xPct / 100) * width
+  const boxTop = (yPct / 100) * height
+  const boxW = Math.max((wPct / 100) * width, 1)
   // The layer div has Tailwind `px-1` + `box-border` — 4px inner horizontal
   // padding — so text wraps and is laid out inside the padded box, not the full
   // box. The background, however, fills the whole (padded) box.

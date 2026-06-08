@@ -31,9 +31,9 @@ export function ToolPickerPage() {
     {
       to: '/video',
       title: 'Video AI',
-      desc: 'Video workspace',
+      desc: isEditor ? 'Video workspace' : 'Review queue',
       icon: Video,
-      show: isEditor,
+      show: true,
       beta: true,
     },
   ].filter((t) => t.show)

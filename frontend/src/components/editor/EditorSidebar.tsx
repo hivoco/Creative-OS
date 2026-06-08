@@ -32,7 +32,6 @@ interface Props {
   onPatchLayer: (id: string, patch: Partial<TextLayer>) => void
   onDeleteLayer: (id: string) => void
   onLivePreview: (layerId: string, language: string, t: Partial<TranslationPayload>) => void
-  onTranslationSaved: () => void
   onCreateVersion: () => void
   onStatusChange: () => void
   onEditDraft: (layerId: string, text: string) => void
@@ -63,7 +62,6 @@ export function EditorSidebar(props: Props) {
     onPatchLayer,
     onDeleteLayer,
     onLivePreview,
-    onTranslationSaved,
     onCreateVersion,
     onStatusChange,
     onEditDraft,
@@ -153,7 +151,6 @@ export function EditorSidebar(props: Props) {
                 onPatchLayer={onPatchLayer}
                 onDelete={onDeleteLayer}
                 onLivePreview={onLivePreview}
-                onTranslationSaved={onTranslationSaved}
               />
             </>
           )}

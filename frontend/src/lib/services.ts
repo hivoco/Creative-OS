@@ -114,6 +114,27 @@ export async function saveTranslation(
   return data
 }
 
+/** Per-language position/size, saved on drag/resize. Partial — only the fields
+ *  sent are changed, so text/style on the same row are left untouched. */
+export interface TranslationGeometry {
+  x_percent_override?: number | null
+  y_percent_override?: number | null
+  width_percent_override?: number | null
+  height_percent_override?: number | null
+}
+
+export async function saveTranslationGeometry(
+  layerId: string,
+  languageCode: string,
+  geometry: TranslationGeometry,
+): Promise<LayerTranslation> {
+  const { data } = await api.patch<LayerTranslation>(
+    `/layers/${layerId}/translations/${languageCode}/geometry`,
+    geometry,
+  )
+  return data
+}
+
 /** Stateless translation — returns translated strings without saving them. */
 export async function translateTexts(
   texts: string[],

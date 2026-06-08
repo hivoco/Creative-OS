@@ -65,6 +65,9 @@ export interface TemplateVersion {
   created_by: string
   version_number: number
   status: 'draft' | 'in_review' | 'approved' | 'rejected'
+  // The original/authoring language (translations are always made from it);
+  // null only on a brand-new version before any content is saved.
+  source_language: string | null
   created_at: string
 }
 
@@ -99,6 +102,11 @@ export interface LayerTranslation {
   line_height_override: number | null
   letter_spacing_override: number | null
   color_override: string | null
+  // Per-language position/size; null inherits the layer.
+  x_percent_override: number | null
+  y_percent_override: number | null
+  width_percent_override: number | null
+  height_percent_override: number | null
   status: string
   last_saved_at: string
 }
@@ -167,10 +175,32 @@ export interface BrandVoice {
 
 export type VideoStageStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
+export type VideoReviewStatus = 'draft' | 'in_review' | 'approved' | 'rejected'
+
+export interface VideoComment {
+  id: string
+  review_request_id: string
+  comment: string
+  resolved: 'open' | 'resolved'
+  created_at: string
+}
+
+export interface VideoReviewRequest {
+  id: string
+  video_job_id: string
+  requested_by: string
+  reviewer_id: string | null
+  status: 'pending' | 'reviewed' | 'approved' | 'rejected'
+  note: string | null
+  sent_at: string
+  comments: VideoComment[]
+}
+
 export interface VideoJob {
   id: string
   title: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
+  review_status: VideoReviewStatus
   current_stage: string
   voice_id: string
   voice_name: string | null

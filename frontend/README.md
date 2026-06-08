@@ -1,15 +1,18 @@
 # Creative OS — Frontend
 
-Vite + React + TypeScript editor for the multilingual brand template platform.
-Reuses the exact theme, fonts (Gilroy), and shadcn UI components from the
-`workspace-tools` app (IIFL tokens + `hv-green` palette).
+Vite + React + TypeScript UI for the multi-brand, multilingual Creative OS
+platform. One app serves four surfaces behind a single login: a **tool picker**,
+the **Image Templates** dashboard + editor, the **Video AI** studio, and the
+**super admin** console. See [`../reference.md`](../reference.md) for the full
+as-built spec.
 
 ## Stack
 
 - **Vite 8 + React 19 + TypeScript**
-- **Tailwind v4** (`@tailwindcss/vite`) + shadcn "new-york" components
+- **Tailwind v4** (`@tailwindcss/vite`) + **shadcn / Radix UI** ("new-york")
 - **React Router 7**, **TanStack Query 5**, **Zustand** (auth), **Axios**
-- **Quill 2** — rich text stored as Delta JSON (per reference.md §6)
+- **Quill 2** — rich text stored as Delta JSON (reference.md §8)
+- **Sonner** (toasts), **lucide-react** (icons), **nanoid**
 
 ## Setup
 
@@ -28,50 +31,99 @@ Make sure the backend is running on port 8000 (or update `VITE_API_BASE_URL`).
 | --- | --- |
 | `npm run dev` | Vite dev server (port 6101) |
 | `npm run build` | `tsc -b` + production build |
-| `npm run lint` | ESLint |
+| `npm run lint` | ESLint (incl. a `max-lines: 300` rule to keep files split) |
 | `npm run preview` | Preview the production build |
 
 ## Routes
 
+One login form handles every role; the response's `account_type` decides where
+you land.
+
 - `/login` — JWT login (demo creds pre-filled).
-- `/` — **Dashboard**: brand's templates, upload dialog (editors only).
-- `/editor/:versionId` — **Editor**: draggable text layers on the blank-image
-  canvas, Quill rich-text per layer/language, language switcher, translate-all,
-  and PNG export (server render).
+- `/` — **Tool picker** (Image Templates / Video AI).
+- `/templates` — **Dashboard**: brand's templates, upload dialog (editors only).
+- `/editor/:versionId` — **Editor** (see below). Remounts on version switch so
+  transient state resets cleanly.
+- `/video` — **Video AI studio** (editors only): pick/clone a voice, upload a
+  photo, write a script, generate, and track jobs.
+- `/admin` & `/admin/brands/:brandId` — **Super admin** console (brands + users).
 
-`RequireAuth` gates everything except `/login` and bounces back to the
-originating path after sign-in.
+`RequireAuth` gates the app surfaces; `RequireAdmin` gates the admin routes.
+Unknown paths redirect to `/`.
 
-## Auto-save (reference.md §5)
+## Editor
 
-Two layers, implemented in `components/editor/useAutoSave.ts`:
+- Canvas **scales to fit the viewport** (no page scroll); the sidebar scrolls on
+  its own.
+- Layers are **draggable + resizable** (8 handles); click empty canvas to
+  deselect; selecting a layer auto-focuses its text box.
+- Full **per-language style** controls (font family/weight/italic/size/color/
+  line-height/letter-spacing) + layer key + background scrim.
+- **Language switcher** + translate-all (Gemini), surfaced as reviewable drafts
+  (`TranslateDraftsPanel`: source vs translated, Apply / Apply all).
+- **Version switcher** + delete version; **review panel** (submit / approve /
+  reject-with-reason / feedback comments, status badge).
+- **Ratios** dialog: pick a target ratio, get an AI layout + AI-resized blank,
+  drag to adjust, save draft / publish.
+- **Keyboard shortcuts:** ⌘/Ctrl+⌫ or ⌘/Ctrl+Delete delete layer (works while
+  typing), ⌘/Ctrl+D duplicate; when not in the text box: ⌘/Ctrl+C / V / Z =
+  layer copy / paste / undo, plain Delete = delete; Esc stops editing /
+  deselects. Undo covers add / paste / duplicate / delete / move / resize.
 
-1. **localStorage** on every keystroke — key `draft_{versionId}_{layerId}_{lang}`,
-   instant, survives refresh/network blips.
-2. **Debounced DB save** 1.5s after typing stops — `PUT /layers/:id/translations/:lang`.
+## Rendering & export (client-side)
 
-On open, the inspector compares the localStorage draft timestamp against the
-server's `last_saved_at`; if the local copy is newer it shows a
-**"You have unsaved changes — restore?"** banner.
+`lib/canvasRenderer.ts` composites the blank image + text layers onto an HTML5
+`<canvas>`, mirroring exactly how `TemplateCanvas` paints the DOM — same
+wrapping, fonts, and inline Delta bold/italic/color. **The browser is the source
+of truth for exports**, so a downloaded PNG/JPG matches the editor pixel-for-
+pixel (the old server-side render diverged on text wrapping).
+
+- **Export**: `EditorPage` fetches the blank from `/versions/:id/blank-image`
+  and calls `renderVersionWithBlank` → downloads a blob.
+- **Ratio variants**: the client renders a composite and POSTs it to
+  `/versions/:id/ratio-variants/from-composite`.
+- Server-side Pillow render (`/versions/:id/render`) is still used for variant
+  thumbnails (`VariantThumb`).
+
+## Auto-save & draft recovery (reference.md §8)
+
+Two layers, in `components/editor/useAutoSave.ts`:
+
+1. **localStorage** on every keystroke — key
+   `draft_{versionId}_{layerId}_{lang}`, instant, survives refresh/network blips.
+2. **Debounced DB save** 1.5s after typing stops —
+   `PUT /layers/:id/translations/:lang`.
+
+`useDraftRecovery.ts` runs once per `versionId` on load: it **sweeps every**
+localStorage draft for the version (not just the selected layer), seeds them onto
+the canvas, flushes each to the DB, and discards drafts whose layer no longer
+exists — so nothing stays invisibly unsaved.
 
 ## Layout
 
 ```
 src/
-  lib/          api (axios + JWT interceptor), services (typed API calls),
-                delta (Quill Delta <-> plain text), utils (cn)
-  store/        auth.ts (Zustand: login / loadMe / logout)
-  components/   RequireAuth, AppHeader, UploadTemplateDialog
-    editor/     QuillEditor, TemplateCanvas (drag), LayerInspector, useAutoSave
-    ui/         shadcn primitives (shared with workspace-tools)
-  pages/        LoginPage, DashboardPage, EditorPage
+  lib/          api (axios + JWT interceptor), services / videoServices (typed
+                API calls), canvasRenderer (client composite + export), delta
+                (Quill Delta <-> runs/plain text), constants, utils (cn)
+  store/        auth.ts (Zustand: login / loadMe / logout; user|brand|admin)
+  components/
+    RequireAuth, RequireAdmin, AppHeader, UploadTemplateDialog
+    editor/     QuillEditor, TemplateCanvas (drag/resize), LayerInspector,
+                LayerStyleControls, AddLayerDialog, RatioDialog, VariantThumb,
+                ReviewPanel, EditorHeader/Sidebar, TranslateDraftsPanel,
+                useAutoSave, useDraftRecovery, useLayerActions, useTranslateDrafts
+    video/      VideoComposer, VideoJobCard, VideoStages, CloneVoiceDialog
+    ui/         shadcn / Radix primitives
+  pages/        LoginPage, ToolPickerPage, DashboardPage, EditorPage, VideoPage,
+                admin/ (BrandsAdminPage, BrandDetailPage, AdminHeader)
   types.ts      domain types mirroring the backend schemas
-  index.css     Tailwind v4 theme + IIFL/hv-green tokens + Gilroy @font-face
+  index.css     Tailwind v4 theme + brand tokens + @font-face
 ```
 
 ## Theme
 
-`index.css`, `public/fonts-gilroy/`, and `src/components/ui/*` are copied from
-`workspace-tools` so the look matches exactly. The app is wrapped in the
-`.app-theme` scope (white canvas, dotted background, Gilroy font). Primary
-action color is `hv-green` on `hv-ink`.
+Hivoco brand (lime-green primary) on the login / tool-picker / dashboard / video
+/ admin surfaces; **neutral black-and-white shadcn** inside the editor (and its
+portaled dialogs) so colour choices read true on the canvas. UI font is **Inter**;
+**Gilroy** is kept as a selectable layer font.
